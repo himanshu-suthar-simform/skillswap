@@ -3,6 +3,9 @@ from django.db.models import Count
 from django.utils.translation import gettext_lazy as _
 from drf_spectacular.utils import OpenApiParameter
 from drf_spectacular.utils import extend_schema
+from general.pagination import LargeResultsSetPagination
+from general.pagination import StandardResultsSetPagination
+from general.permissions import AdminOrReadOnly
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -12,9 +15,6 @@ from .filters import SkillCategoryFilter
 from .filters import SkillFilter
 from .models import Skill
 from .models import SkillCategory
-from .pagination import LargeResultsSetPagination
-from .pagination import StandardResultsSetPagination
-from .permissions import AdminOrReadOnly
 from .serializers import SkillCategorySerializer
 from .serializers import SkillDetailSerializer
 from .serializers import SkillListSerializer
@@ -121,21 +121,18 @@ class SkillViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """
         Get the list of skills with optimized queries.
-        Annotates the queryset with counts of active teachers.
         """
         queryset = self.queryset.select_related("category")
 
         if self.action == "list":
-            # Optimize for list view
+            # Add annotation for list view
             return queryset.annotate(
-                total_teachers=Count(
+                total_teachers_count=Count(
                     "teachers", filter=models.Q(teachers__is_active=True)
                 )
             )
-        # Optimize for detail view
-        return queryset.prefetch_related("teachers").annotate(
-            total_teachers=Count("teachers", filter=models.Q(teachers__is_active=True))
-        )
+        # Add prefetch for detail view
+        return queryset.prefetch_related("teachers")
 
     @extend_schema(
         summary="Toggle skill status",

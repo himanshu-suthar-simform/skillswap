@@ -44,7 +44,7 @@ THIRD_PARTY_APPS = [
 ]
 
 # Internal apps
-INTERNAL_APPS = ["accounts", "skillhub"]
+INTERNAL_APPS = ["general", "accounts", "skillhub"]
 
 INSTALLED_APPS = INBUILT_APPS + THIRD_PARTY_APPS + INTERNAL_APPS
 

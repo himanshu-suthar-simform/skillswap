@@ -84,7 +84,9 @@ class SkillListSerializer(serializers.ModelSerializer):
     """
 
     category_name = serializers.CharField(source="category.name", read_only=True)
-    total_teachers = serializers.IntegerField(read_only=True)
+    total_teachers = serializers.IntegerField(
+        source="total_teachers_count", read_only=True
+    )
 
     class Meta:
         model = Skill
@@ -107,7 +109,9 @@ class SkillDetailSerializer(serializers.ModelSerializer):
     """
 
     category_details = SkillCategorySerializer(source="category", read_only=True)
-    total_teachers = serializers.IntegerField(read_only=True)
+    total_teachers = serializers.IntegerField(
+        source="total_teachers_count", read_only=True
+    )
 
     class Meta:
         model = Skill
