@@ -26,6 +26,7 @@ doc_patterns = [
 # API patterns
 api_patterns = [
     path("accounts/", include("accounts.urls", namespace="accounts")),
+    path("skillhub/", include("skillhub.urls", namespace="skillhub")),
 ]
 
 # Main URL patterns

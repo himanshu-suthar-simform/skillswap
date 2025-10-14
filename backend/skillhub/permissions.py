@@ -1,0 +1,26 @@
+from rest_framework.permissions import SAFE_METHODS
+from rest_framework.permissions import BasePermission
+
+
+class AdminOrReadOnly(BasePermission):
+    """
+    Custom permission to allow:
+    - Admin users, staff users, and superusers to perform all operations
+    - Regular authenticated users to only retrieve or create
+    """
+
+    def has_permission(self, request, view):
+        # First check if user is authenticated
+        if not request.user or not request.user.is_authenticated:
+            return False
+
+        # Allow read and create operations for all authenticated users
+        if request.method in SAFE_METHODS or request.method == "POST":
+            return True
+
+        # Allow update and delete for admin users, staff users, and superusers
+        return bool(
+            request.user.role == "ADMIN"
+            or request.user.is_staff
+            or request.user.is_superuser
+        )
