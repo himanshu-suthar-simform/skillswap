@@ -40,6 +40,7 @@ THIRD_PARTY_APPS = [
     "django_filters",
     "corsheaders",
     "drf_spectacular",
+    "drf_spectacular_sidecar",
 ]
 
 # Internal apps
@@ -126,9 +127,26 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# Additional locations of static files
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+]
+
+# Static files finder configuration
+STATICFILES_FINDERS = [
+    "django.contrib.staticfiles.finders.FileSystemFinder",
+    "django.contrib.staticfiles.finders.AppDirectoriesFinder",
+]
+
 # Media files (User uploaded files)
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Ensure media and static directories exist
+# NOTE: The media root and static files are only needed for local development purpose.
+# We need to remove this in production and use file service and route it to it through proxy services.
+MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+STATIC_ROOT.mkdir(parents=True, exist_ok=True)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -184,5 +202,49 @@ SIMPLE_JWT = {
     "USER_ID_CLAIM": "user_id",
 }
 
-# 5 MB
-MAX_FILE_UPLOAD_SIZE = 5 * 1024 * 1024
+# OpenAPI/Swagger settings
+SPECTACULAR_SETTINGS = {
+    "TITLE": "SkillSwap API",
+    "DESCRIPTION": """
+    SkillSwap is a peer-to-peer skill exchange platform where users can teach and learn skills directly from one another.
+
+    Key Features:
+    - User registration and authentication
+    - Role-based access (Admin/User)
+    - Profile management
+    - JWT-based authentication
+    """,
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,  # Hide the raw schema endpoint
+    "COMPONENT_SPLIT_REQUEST": True,  # Better organization in docs
+    "SWAGGER_UI_SETTINGS": {
+        "deepLinking": True,  # Enables deep linking for better navigation
+        "persistAuthorization": True,  # Maintains auth between page refreshes
+        "displayRequestDuration": True,  # Shows API call duration
+        "filter": True,  # Enables filtering operations
+        "displayOperationId": False,  # Cleaner UI without operation IDs
+    },
+    "SWAGGER_UI_DIST": "SIDECAR",  # Serve Swagger UI from local static files
+    "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
+    "REDOC_DIST": "SIDECAR",  # Serve ReDoc from local static files
+    # Security Definitions
+    "SECURITY_DEFINITIONS": {
+        "Bearer": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header",
+            "description": "Enter 'Bearer <token>' (quotes are optional)",
+        }
+    },
+    # Tags for better organization
+    "TAGS": [
+        {"name": "Authentication", "description": "User authentication endpoints"},
+        {"name": "User Management", "description": "User and profile management"},
+    ],
+    # Contact and License info
+    "CONTACT": {"name": "SkillSwap Support", "email": "support@skillswap.com"},
+    "LICENSE": {"name": "MIT License", "url": "https://opensource.org/licenses/MIT"},
+}
+
+# File Upload Settings
+MAX_FILE_UPLOAD_SIZE = 5 * 1024 * 1024  # 5 MB
