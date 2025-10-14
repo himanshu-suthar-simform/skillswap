@@ -22,6 +22,14 @@ DEBUG = os.environ.get("DEBUG", "True") == "True"
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(",")
 
 
+# Cache settings for rate limiting
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "unique-skillswap",
+    }
+}
+
 # Application definition
 INBUILT_APPS = [
     "django.contrib.admin",
@@ -177,6 +185,11 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 10,
     # API schema / Swagger
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Rate limiting
+    "DEFAULT_THROTTLE_CLASSES": [],  # No global throttling
+    "DEFAULT_THROTTLE_RATES": {
+        "skill_creation": "10/hour",  # Base rate for skill creation
+    },
 }
 
 # Simple JWT settings

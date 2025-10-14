@@ -9,6 +9,7 @@ from general.pagination import LargeResultsSetPagination
 from general.pagination import StandardResultsSetPagination
 from general.permissions import AdminOrReadOnly
 from general.permissions import IsOwnerOrAdmin
+from general.throttling import SkillCreationRateThrottle
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -104,7 +105,7 @@ class SkillViewSet(viewsets.ModelViewSet):
 
     Supports:
     - List skills with filtering and search
-    - Create new skills
+    - Create new skills (rate limited: 10/hour, 100/day)
     - Retrieve skill details
     - Update skills
     - Delete skills (soft delete)
@@ -118,6 +119,15 @@ class SkillViewSet(viewsets.ModelViewSet):
     search_fields = ["name", "description", "category__name"]
     ordering_fields = ["name", "created_at", "updated_at", "total_teachers"]
     ordering = ["name"]
+
+    def get_throttles(self):
+        """
+        Apply rate limiting only to create operations.
+        Other operations remain unthrottled.
+        """
+        if self.action == "create":
+            return [SkillCreationRateThrottle()]
+        return []
 
     def get_serializer_class(self):
         """
@@ -230,7 +240,7 @@ class UserSkillViewSet(viewsets.ModelViewSet):
 
     Supports:
     - List user's teaching skills with filtering and search
-    - Create new teaching skill offering
+    - Create new teaching skill offering (rate limited: 10/hour, 100/day)
     - Retrieve teaching skill details
     - Update teaching skill information
     - Delete teaching skill
@@ -256,6 +266,15 @@ class UserSkillViewSet(viewsets.ModelViewSet):
         "rating",
     ]
     ordering = ["-created_at"]
+
+    def get_throttles(self):
+        """
+        Apply rate limiting only to create operations.
+        Other operations remain unthrottled.
+        """
+        if self.action == "create":
+            return [SkillCreationRateThrottle()]
+        return []
 
     def get_queryset(self):
         """
