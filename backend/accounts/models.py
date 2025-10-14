@@ -40,7 +40,10 @@ class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     bio = models.TextField(_("biography"), max_length=500, blank=True)
     profile_picture = models.ImageField(
-        upload_to="profile_pictures/", null=True, blank=True
+        upload_to="profile_pictures/%Y/%m/",
+        null=True,
+        blank=True,
+        help_text=_("Profile picture (max 5MB, must be an image)"),
     )
     phone_number = models.CharField(
         max_length=15, blank=True, help_text=_("Contact phone number")

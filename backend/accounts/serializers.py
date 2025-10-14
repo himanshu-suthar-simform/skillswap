@@ -1,0 +1,259 @@
+import os
+
+from django.conf import settings
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
+from django.core.files.images import get_image_dimensions
+from rest_framework import serializers
+
+from .models import Profile, User
+
+
+class ProfileSerializer(serializers.ModelSerializer):
+    """
+    Serializer for the Profile model.
+
+    This serializer handles the user profile information that complements
+    the main User model. It's designed to work both independently and as
+    a nested serializer within UserSerializer.
+    """
+
+    # Add profile picture URL for read operations
+    profile_picture_url = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = Profile
+        fields = [
+            "bio",
+            "profile_picture",
+            "profile_picture_url",
+            "phone_number",
+            "location",
+            "timezone",
+            "language_preference",
+            "is_available",
+        ]
+        extra_kwargs = {
+            "phone_number": {"required": False},
+            "location": {"required": False},
+            "timezone": {"required": False},
+            "language_preference": {"required": False},
+            "is_available": {"required": False},
+            "profile_picture": {"write_only": True},
+        }
+
+    def get_profile_picture_url(self, obj):
+        """
+        Get the complete URL for the profile picture.
+
+        Args:
+            obj: Profile instance
+
+        Returns:
+            str: Complete URL to the profile picture if it exists, None otherwise
+        """
+        if obj.profile_picture:
+            request = self.context.get("request")
+            if request:
+                return request.build_absolute_uri(obj.profile_picture.url)
+        return None
+
+    def validate_profile_picture(self, value):
+        """
+        Validate the profile picture upload.
+
+        Validates:
+        1. File size (max 5MB)
+        2. File type (must be image)
+        3. Image dimensions (min 100x100, max 4000x4000)
+
+        Args:
+            value: The uploaded file
+
+        Returns:
+            File: The validated file
+
+        Raises:
+            serializers.ValidationError: If validation fails
+        """
+        if not value:
+            return value
+
+        # Check file size (5MB limit)
+        if value.size > settings.MAX_FILE_UPLOAD_SIZE:
+            raise serializers.ValidationError(
+                "Profile picture size should not exceed 5MB."
+            )
+
+        # Check file type
+        ext = os.path.splitext(value.name)[1].lower()
+        if ext not in [".jpg", ".jpeg", ".png", ".gif"]:
+            raise serializers.ValidationError(
+                "Only JPG, JPEG, PNG and GIF files are allowed."
+            )
+
+        # Check image dimensions
+        width, height = get_image_dimensions(value)
+        if not width or not height:
+            raise serializers.ValidationError("Uploaded file is not a valid image.")
+
+        if width < 100 or height < 100:
+            raise serializers.ValidationError(
+                "Image dimensions must be at least 100x100 pixels."
+            )
+
+        if width > 4000 or height > 4000:
+            raise serializers.ValidationError(
+                "Image dimensions must not exceed 4000x4000 pixels."
+            )
+
+        return value
+
+
+class UserRegistrationSerializer(serializers.ModelSerializer):
+    """
+    Serializer for user registration.
+
+    This serializer handles the creation of both User and Profile models
+    through a single API endpoint. It includes custom validation for the
+    password field and ensures all required fields are properly validated.
+
+    The serializer automatically:
+    1. Creates a user with encrypted password
+    2. Creates an associated profile
+    3. Sets the default role as USER
+    4. Validates password strength
+    5. Ensures email uniqueness
+    """
+
+    # Add write-only password confirmation field
+    password_confirm = serializers.CharField(
+        write_only=True,
+        required=True,
+        help_text="Confirm password (must match password field)",
+    )
+
+    # Nested profile serializer for creating profile along with user
+    profile = ProfileSerializer(required=False)
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "email",
+            "username",
+            "password",
+            "password_confirm",
+            "first_name",
+            "last_name",
+            "profile",
+        ]
+        extra_kwargs = {
+            "password": {
+                "write_only": True,
+                "help_text": "Password must meet system requirements",
+            },
+            "id": {"read_only": True},
+            "email": {"required": True},
+            "first_name": {"required": True},
+            "last_name": {"required": True},
+        }
+
+    def validate_email(self, value):
+        """
+        Validate email uniqueness and format.
+
+        Args:
+            value: The email to validate
+
+        Returns:
+            str: The validated email
+
+        Raises:
+            serializers.ValidationError: If email is invalid or already exists
+        """
+        # Email is automatically validated by EmailField
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+    def validate_password(self, value):
+        """
+        Validate password strength using Django's password validators.
+
+        Args:
+            value: The password to validate
+
+        Returns:
+            str: The validated password
+
+        Raises:
+            serializers.ValidationError: If password doesn't meet requirements
+        """
+        try:
+            # Use Django's built-in password validation
+            validate_password(value)
+        except ValidationError as e:
+            raise serializers.ValidationError(list(e.messages))
+        return value
+
+    def validate(self, data):
+        """
+        Validate the entire data set.
+
+        Ensures:
+        1. Password and password_confirm match
+        2. Required fields are present
+
+        Args:
+            data: The data to validate
+
+        Returns:
+            dict: The validated data
+
+        Raises:
+            serializers.ValidationError: If validation fails
+        """
+        if data.get("password") != data.get("password_confirm"):
+            raise serializers.ValidationError(
+                {"password_confirm": "Password confirmation doesn't match password."}
+            )
+        return data
+
+    def create(self, validated_data):
+        """
+        Create a new user and associated profile.
+
+        This method:
+        1. Removes password_confirm from validated_data
+        2. Extracts profile data if present
+        3. Creates the user with a hashed password
+        4. Creates the associated profile
+
+        Args:
+            validated_data: The validated data from which to create the user
+
+        Returns:
+            User: The newly created user instance
+        """
+        # Remove password confirmation field
+        validated_data.pop("password_confirm", None)
+
+        # Extract profile data
+        profile_data = validated_data.pop("profile", {})
+
+        # Set role as USER
+        validated_data["role"] = User.Role.USER
+
+        # Create user instance but don't save yet
+        password = validated_data.pop("password")
+        user = User(**validated_data)
+
+        # Set and hash password
+        user.set_password(password)
+        user.save()
+
+        # Create profile
+        Profile.objects.create(user=user, **profile_data)
+
+        return user
