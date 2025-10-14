@@ -11,6 +11,41 @@ from .models import Profile
 from .models import User
 
 
+class UserBasicSerializer(serializers.ModelSerializer):
+    """
+    Basic serializer for User model.
+    Used for nested representations where only basic user info is needed.
+    """
+
+    full_name = serializers.SerializerMethodField()
+    profile_picture_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "full_name",
+            "profile_picture_url",
+            "is_active",
+        ]
+        read_only_fields = fields
+
+    def get_full_name(self, obj):
+        """Get user's full name or username if name not set."""
+        return obj.get_full_name() or obj.username
+
+    def get_profile_picture_url(self, obj):
+        """Get URL of user's profile picture if it exists."""
+        try:
+            if obj.profile and obj.profile.profile_picture:
+                return obj.profile.profile_picture.url
+        except Profile.DoesNotExist:
+            pass
+        return None
+
+
 class ProfileSerializer(serializers.ModelSerializer):
     """
     Serializer for the Profile model.

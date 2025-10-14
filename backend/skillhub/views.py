@@ -2,6 +2,7 @@ from django.db import models
 from django.db.models import Avg
 from django.db.models import Count
 from django.db.models import Prefetch
+from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 from drf_spectacular.utils import OpenApiParameter
 from drf_spectacular.utils import extend_schema
@@ -14,6 +15,7 @@ from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .filters import SkillCategoryFilter
@@ -21,10 +23,13 @@ from .filters import SkillFilter
 from .filters import UserSkillFilter
 from .models import Skill
 from .models import SkillCategory
+from .models import SkillExchange
 from .models import SkillMilestone
 from .models import UserSkill
 from .serializers import SkillCategorySerializer
 from .serializers import SkillDetailSerializer
+from .serializers import SkillExchangeDetailSerializer
+from .serializers import SkillExchangeListSerializer
 from .serializers import SkillListSerializer
 from .serializers import SkillMilestoneSerializer
 from .serializers import UserSkillDetailSerializer
@@ -574,3 +579,293 @@ class UserSkillViewSet(viewsets.ModelViewSet):
             instance.save()
         else:
             instance.delete()
+
+
+class SkillExchangeViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing skill exchange requests.
+
+    Supports:
+    - List exchange requests (both sent and received)
+    - Create new exchange request
+    - Retrieve exchange details
+    - Accept/reject exchange requests
+    - Cancel exchanges
+    - Mark exchanges as completed
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+    filterset_fields = ["status"]
+    search_fields = [
+        "user_skill__skill__name",
+        "user_skill__user__email",
+        "user_skill__user__username",
+        "learner__email",
+        "learner__username",
+    ]
+    ordering_fields = ["created_at", "updated_at", "status"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        """
+        Get exchange requests based on user role:
+        - As teacher: Requests received for their skills
+        - As learner: Requests sent to learn skills
+        """
+        user = self.request.user
+        base_qs = SkillExchange.objects.select_related(
+            "user_skill", "user_skill__user", "user_skill__skill", "learner"
+        )
+
+        if self.action == "list":
+            # For list view, show both sent and received requests
+            return base_qs.filter(
+                Q(user_skill__user=user)  # Requests received as teacher
+                | Q(learner=user)  # Requests sent as learner
+            )
+
+        # For other actions, include prefetch for detailed view
+        return base_qs.prefetch_related(
+            "user_skill__milestones", "user_skill__feedback_received"
+        )
+
+    def get_serializer_class(self):
+        """Use appropriate serializer based on action."""
+        if self.action == "list":
+            return SkillExchangeListSerializer
+        return SkillExchangeDetailSerializer
+
+    def perform_create(self, serializer):
+        """Create exchange request and handle notifications."""
+        exchange = serializer.save()
+        # TODO: Send notification to teacher about new request
+        return exchange
+
+    @extend_schema(
+        summary="Accept exchange request",
+        description="Accept a pending skill exchange request.",
+        responses={
+            200: SkillExchangeDetailSerializer,
+            400: {"description": "Invalid request"},
+            403: {"description": "Permission denied"},
+            404: {"description": "Exchange not found"},
+        },
+    )
+    @action(detail=True, methods=["post"])
+    def accept(self, request, pk=None):
+        """Accept a pending exchange request."""
+        exchange = self.get_object()
+
+        # Validate state and permissions
+        if exchange.user_skill.user != request.user:
+            return Response(
+                {"detail": _("Only the teacher can accept this request.")},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if exchange.status != SkillExchange.Status.PENDING:
+            return Response(
+                {"detail": _("Only pending requests can be accepted.")},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check teacher availability
+        active_exchanges = exchange.user_skill.exchanges.filter(
+            status__in=["ACCEPTED", "IN_PROGRESS"]
+        ).count()
+        if active_exchanges >= exchange.user_skill.max_students:
+            return Response(
+                {"detail": _("You have reached your maximum number of students.")},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Accept the exchange
+        exchange.status = SkillExchange.Status.ACCEPTED
+        exchange.save()
+
+        # TODO: Send notification to learner about acceptance
+
+        serializer = self.get_serializer(exchange)
+        return Response(serializer.data)
+
+    @extend_schema(
+        summary="Reject exchange request",
+        description="Reject a pending skill exchange request.",
+        parameters=[
+            OpenApiParameter(
+                name="reason",
+                location=OpenApiParameter.QUERY,
+                description="Reason for rejection (optional)",
+                required=False,
+                type=str,
+            ),
+        ],
+        responses={
+            200: SkillExchangeDetailSerializer,
+            400: {"description": "Invalid request"},
+            403: {"description": "Permission denied"},
+            404: {"description": "Exchange not found"},
+        },
+    )
+    @action(detail=True, methods=["post"])
+    def reject(self, request, pk=None):
+        """Reject a pending exchange request."""
+        exchange = self.get_object()
+
+        # Validate state and permissions
+        if exchange.user_skill.user != request.user:
+            return Response(
+                {"detail": _("Only the teacher can reject this request.")},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if exchange.status != SkillExchange.Status.PENDING:
+            return Response(
+                {"detail": _("Only pending requests can be rejected.")},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Reject the exchange
+        exchange.status = SkillExchange.Status.CANCELLED
+        exchange.save()
+
+        # TODO: Send notification to learner about rejection
+        # TODO: Store rejection reason if provided
+
+        serializer = self.get_serializer(exchange)
+        return Response(serializer.data)
+
+    @extend_schema(
+        summary="Start learning session",
+        description="Mark an accepted exchange as in progress.",
+        responses={
+            200: SkillExchangeDetailSerializer,
+            400: {"description": "Invalid request"},
+            403: {"description": "Permission denied"},
+            404: {"description": "Exchange not found"},
+        },
+    )
+    @action(detail=True, methods=["post"])
+    def start(self, request, pk=None):
+        """Start the learning session for an accepted exchange."""
+        exchange = self.get_object()
+
+        # Validate state and permissions
+        if (
+            exchange.user_skill.user != request.user
+            and exchange.learner != request.user
+        ):
+            return Response(
+                {"detail": _("Only participants can start this exchange.")},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if exchange.status != SkillExchange.Status.ACCEPTED:
+            return Response(
+                {"detail": _("Only accepted exchanges can be started.")},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Start the exchange
+        exchange.status = SkillExchange.Status.IN_PROGRESS
+        exchange.save()
+
+        # TODO: Send notification to both participants
+
+        serializer = self.get_serializer(exchange)
+        return Response(serializer.data)
+
+    @extend_schema(
+        summary="Complete exchange",
+        description="Mark an in-progress exchange as completed.",
+        responses={
+            200: SkillExchangeDetailSerializer,
+            400: {"description": "Invalid request"},
+            403: {"description": "Permission denied"},
+            404: {"description": "Exchange not found"},
+        },
+    )
+    @action(detail=True, methods=["post"])
+    def complete(self, request, pk=None):
+        """Mark an exchange as completed."""
+        exchange = self.get_object()
+
+        # Validate state and permissions
+        if (
+            exchange.user_skill.user != request.user
+            and exchange.learner != request.user
+        ):
+            return Response(
+                {"detail": _("Only participants can complete this exchange.")},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if exchange.status != SkillExchange.Status.IN_PROGRESS:
+            return Response(
+                {"detail": _("Only in-progress exchanges can be completed.")},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Complete the exchange
+        exchange.status = SkillExchange.Status.COMPLETED
+        exchange.save()
+
+        # TODO: Send notification to both participants
+        # TODO: Prompt for feedback
+
+        serializer = self.get_serializer(exchange)
+        return Response(serializer.data)
+
+    @extend_schema(
+        summary="Cancel exchange",
+        description="Cancel an exchange (only possible in PENDING or ACCEPTED state).",
+        parameters=[
+            OpenApiParameter(
+                name="reason",
+                location=OpenApiParameter.QUERY,
+                description="Reason for cancellation (optional)",
+                required=False,
+                type=str,
+            ),
+        ],
+        responses={
+            200: SkillExchangeDetailSerializer,
+            400: {"description": "Invalid request"},
+            403: {"description": "Permission denied"},
+            404: {"description": "Exchange not found"},
+        },
+    )
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        """Cancel an exchange."""
+        exchange = self.get_object()
+
+        # Validate state and permissions
+        if (
+            exchange.user_skill.user != request.user
+            and exchange.learner != request.user
+        ):
+            return Response(
+                {"detail": _("Only participants can cancel this exchange.")},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if exchange.status not in [
+            SkillExchange.Status.PENDING,
+            SkillExchange.Status.ACCEPTED,
+        ]:
+            return Response(
+                {"detail": _("Only pending or accepted exchanges can be cancelled.")},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Cancel the exchange
+        exchange.status = SkillExchange.Status.CANCELLED
+        exchange.save()
+
+        # TODO: Send notification to other participant
+        # TODO: Store cancellation reason if provided
+
+        serializer = self.get_serializer(exchange)
+        return Response(serializer.data)

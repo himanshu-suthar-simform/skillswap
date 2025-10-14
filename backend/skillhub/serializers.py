@@ -1,8 +1,10 @@
+from accounts.serializers import UserBasicSerializer
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
 from .models import Skill
 from .models import SkillCategory
+from .models import SkillExchange
 from .models import SkillMilestone
 from .models import UserSkill
 
@@ -381,4 +383,179 @@ class UserSkillDetailSerializer(serializers.ModelSerializer):
         """Create UserSkill with current user."""
         user = self.context["request"].user
         validated_data["user"] = user
+        return super().create(validated_data)
+
+
+class SkillExchangeListSerializer(serializers.ModelSerializer):
+    """
+    Serializer for listing skill exchange requests.
+    Shows basic information needed for list views.
+    """
+
+    teacher_skill = serializers.SerializerMethodField()
+    learner = UserBasicSerializer(read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+
+    class Meta:
+        model = SkillExchange
+        fields = [
+            "id",
+            "user_skill",
+            "teacher_skill",
+            "learner",
+            "status",
+            "status_display",
+            "created_at",
+        ]
+        read_only_fields = ["status", "created_at"]
+
+    def get_teacher_skill(self, obj):
+        """Get basic information about the teacher's skill."""
+        return {
+            "teacher_name": obj.user_skill.user.get_full_name()
+            or obj.user_skill.user.email,
+            "skill_name": obj.user_skill.skill.name,
+            "proficiency_level": obj.user_skill.get_proficiency_level_display(),
+        }
+
+
+class SkillExchangeDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializer for detailed skill exchange information.
+    Used for create, retrieve, and update operations.
+    """
+
+    teacher_skill = UserSkillDetailSerializer(source="user_skill", read_only=True)
+    learner = UserBasicSerializer(read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    offered_skill = serializers.PrimaryKeyRelatedField(
+        queryset=UserSkill.objects.all(),
+        required=False,
+        write_only=True,
+        help_text=_("The skill offered by the learner in exchange (optional)"),
+    )
+
+    class Meta:
+        model = SkillExchange
+        fields = [
+            "id",
+            "user_skill",
+            "teacher_skill",
+            "learner",
+            "offered_skill",
+            "status",
+            "status_display",
+            "learning_goals",
+            "availability",
+            "proposed_duration",
+            "notes",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["status", "learner", "created_at", "updated_at"]
+
+    def validate_user_skill(self, value):
+        """
+        Validate the requested teaching skill:
+        - Must be active
+        - Can't request your own skill
+        - Teacher must be available
+        """
+        request = self.context["request"]
+
+        if not value.is_active:
+            raise serializers.ValidationError(
+                _("This skill is not currently available for teaching.")
+            )
+
+        if value.user == request.user:
+            raise serializers.ValidationError(
+                _("You cannot request to learn your own teaching skill.")
+            )
+
+        # Check if teacher has reached maximum students
+        active_exchanges = value.exchanges.filter(
+            status__in=["ACCEPTED", "IN_PROGRESS"]
+        ).count()
+        if active_exchanges >= value.max_students:
+            raise serializers.ValidationError(
+                _("This teacher has reached their maximum number of students.")
+            )
+
+        return value
+
+    def validate_offered_skill(self, value):
+        """
+        Validate the offered skill:
+        - Must be active
+        - Must belong to the requesting user
+        """
+        if value:
+            request = self.context["request"]
+
+            if value.user != request.user:
+                raise serializers.ValidationError(
+                    _("You can only offer your own teaching skills.")
+                )
+
+            if not value.is_active:
+                raise serializers.ValidationError(
+                    _("The skill you're offering is not currently active.")
+                )
+
+        return value
+
+    def validate(self, data):
+        """
+        Cross-field validation:
+        - Ensure reasonable proposed duration
+        - Basic availability format check
+        - Prevent duplicate active requests
+        """
+        # Validate proposed duration (between 1 hour and 6 months)
+        if data.get("proposed_duration", 0) > 1000:
+            raise serializers.ValidationError(
+                {"proposed_duration": _("Proposed duration seems unreasonably long.")}
+            )
+
+        # Ensure availability is provided and has reasonable length
+        availability = data.get("availability", "").strip()
+        if not availability:
+            raise serializers.ValidationError(
+                {"availability": _("You must provide your availability.")}
+            )
+        if len(availability) < 10:
+            raise serializers.ValidationError(
+                {
+                    "availability": _(
+                        "Please provide more detailed availability information."
+                    )
+                }
+            )
+
+        # Check for duplicate active requests
+        request = self.context["request"]
+        user_skill = data.get("user_skill")
+
+        if self.instance is None:  # Only check on create
+            existing_request = SkillExchange.objects.filter(
+                user_skill=user_skill,
+                learner=request.user,
+                status__in=["PENDING", "ACCEPTED", "IN_PROGRESS"],
+            ).exists()
+
+            if existing_request:
+                raise serializers.ValidationError(
+                    _("You already have an active request for this skill.")
+                )
+
+        return data
+
+    def create(self, validated_data):
+        """Create exchange request with current user as learner."""
+        request = self.context["request"]
+        # Remove offered_skill as it's not a model field
+        validated_data.pop("offered_skill", None)
+        validated_data["learner"] = request.user
+        validated_data["status"] = SkillExchange.Status.PENDING
         return super().create(validated_data)
