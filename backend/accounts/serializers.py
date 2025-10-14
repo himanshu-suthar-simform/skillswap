@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.files.images import get_image_dimensions
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -32,10 +33,12 @@ class UserBasicSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    @extend_schema_field(str)
     def get_full_name(self, obj):
         """Get user's full name or username if name not set."""
         return obj.get_full_name() or obj.username
 
+    @extend_schema_field({"type": "string", "format": "uri", "nullable": True})
     def get_profile_picture_url(self, obj):
         """Get URL of user's profile picture if it exists."""
         try:

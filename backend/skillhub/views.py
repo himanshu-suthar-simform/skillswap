@@ -253,6 +253,7 @@ class UserSkillViewSet(viewsets.ModelViewSet):
     - Manage skill milestones
     """
 
+    queryset = UserSkill.objects.none()  # Prevents swagger generation issues
     permission_classes = [IsOwnerOrAdmin]
     pagination_class = StandardResultsSetPagination
     filterset_class = UserSkillFilter
@@ -286,6 +287,9 @@ class UserSkillViewSet(viewsets.ModelViewSet):
         Get the list of user skills with optimized queries.
         Filter based on user permissions and annotate with stats.
         """
+        if getattr(self, "swagger_fake_view", False):  # Handles swagger generation
+            return self.queryset
+
         queryset = UserSkill.objects.select_related("user", "skill", "skill__category")
 
         # For non-admin users, show only active skills of others
@@ -594,6 +598,7 @@ class SkillExchangeViewSet(viewsets.ModelViewSet):
     - Mark exchanges as completed
     """
 
+    queryset = SkillExchange.objects.none()  # Prevents swagger generation issues
     permission_classes = [IsAuthenticated]
     pagination_class = StandardResultsSetPagination
     filterset_fields = ["status"]
@@ -613,6 +618,9 @@ class SkillExchangeViewSet(viewsets.ModelViewSet):
         - As teacher: Requests received for their skills
         - As learner: Requests sent to learn skills
         """
+        if getattr(self, "swagger_fake_view", False):  # Handles swagger generation
+            return self.queryset
+
         user = self.request.user
         base_qs = SkillExchange.objects.select_related(
             "user_skill", "user_skill__user", "user_skill__skill", "learner"

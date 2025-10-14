@@ -1,5 +1,6 @@
 from accounts.serializers import UserBasicSerializer
 from django.utils.translation import gettext_lazy as _
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from .models import Skill
@@ -409,6 +410,16 @@ class SkillExchangeListSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["status", "created_at"]
 
+    @extend_schema_field(
+        {
+            "type": "object",
+            "properties": {
+                "teacher_name": {"type": "string"},
+                "skill_name": {"type": "string"},
+                "proficiency_level": {"type": "string"},
+            },
+        }
+    )
     def get_teacher_skill(self, obj):
         """Get basic information about the teacher's skill."""
         return {

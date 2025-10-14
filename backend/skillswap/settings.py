@@ -247,7 +247,6 @@ SPECTACULAR_SETTINGS = {
     # Tags for better organization
     "TAGS": [
         {"name": "Authentication", "description": "User authentication endpoints"},
-        {"name": "User Management", "description": "User and profile management"},
     ],
     # Contact and License info
     "CONTACT": {"name": "SkillSwap Support", "email": "support@skillswap.com"},
