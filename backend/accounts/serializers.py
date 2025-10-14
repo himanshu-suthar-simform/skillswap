@@ -5,8 +5,10 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.files.images import get_image_dimensions
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from .models import Profile, User
+from .models import Profile
+from .models import User
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -257,3 +259,65 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         Profile.objects.create(user=user, **profile_data)
 
         return user
+
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """
+    Custom Token Obtain Pair Serializer that includes additional user information
+    in the response along with the access and refresh tokens.
+    """
+
+    def validate(self, attrs):
+        # Get the default token data (access and refresh tokens)
+        data = super().validate(attrs)
+
+        # Add custom claims to both access and refresh tokens
+        self.add_user_context_to_token(data)
+
+        return data
+
+    def add_user_context_to_token(self, data):
+        """
+        Add user context information to token response.
+
+        Args:
+            data (dict): The token data dictionary to update
+        """
+        user = self.user
+        # Add basic user information
+        data.update(
+            {
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "username": user.username,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "role": user.role,
+                    "is_active": user.is_active,
+                }
+            }
+        )
+
+        # Add profile information if it exists
+        if hasattr(user, "profile"):
+            profile = user.profile
+            data["user"].update(
+                {
+                    "profile": {
+                        "bio": profile.bio,
+                        "location": profile.location,
+                        "timezone": profile.timezone,
+                        "language_preference": profile.language_preference,
+                        "is_available": profile.is_available,
+                    }
+                }
+            )
+
+            # Add profile picture URL if it exists
+            if profile.profile_picture:
+                request = self.context.get("request")
+                if request:
+                    data["user"]["profile"]["profile_picture_url"] = (
+                        request.build_absolute_uri(profile.profile_picture.url)
+                    )
