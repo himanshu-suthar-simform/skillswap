@@ -1,0 +1,39 @@
+repos:
+  # --- Code formatting with Black ---
+  - repo: https://github.com/psf/black
+    rev: 24.8.0   # check for latest version
+    hooks:
+      - id: black
+        language_version: python3
+
+  # --- Remove unused imports & variables ---
+  - repo: https://github.com/PyCQA/autoflake
+    rev: v2.3.1
+    hooks:
+      - id: autoflake
+        args: ["--remove-all-unused-imports", "--remove-unused-variables", "--in-place"]
+        files: \.py$
+
+  # --- Sort imports consistently ---
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        name: isort (python)
+        args: ["--profile=black"]
+
+  # --- Linting with flake8 ---
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.1.0
+    hooks:
+      - id: flake8
+        additional_dependencies: [flake8-bugbear]
+
+  # --- Check YAML and JSON syntax ---
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
