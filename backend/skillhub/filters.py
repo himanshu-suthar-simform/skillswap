@@ -4,6 +4,7 @@ from django_filters import rest_framework as filters
 
 from .models import Skill
 from .models import SkillCategory
+from .models import UserSkill
 
 
 class SkillCategoryFilter(filters.FilterSet):
@@ -90,3 +91,77 @@ class SkillFilter(filters.FilterSet):
                 "teachers", filter=models.Q(teachers__is_active=True)
             )
         ).filter(active_teachers_count__gte=value)
+
+
+class UserSkillFilter(filters.FilterSet):
+    """
+    Filter set for UserSkill model.
+
+    Filters:
+    - skill: Filter by skill ID
+    - category: Filter by category ID
+    - user: Filter by user ID
+    - is_active: Boolean filter
+    - min_rating: Filter by minimum rating
+    - min_experience: Filter by minimum years of experience
+    - proficiency_level: Filter by exact proficiency level
+    - min_proficiency: Filter by minimum proficiency level
+    - has_students: Boolean filter for skills with/without students
+    - min_students: Filter by minimum number of students
+    - price_range: Filter by hourly rate range
+    - created_after: Filter skills created after given date
+    - created_before: Filter skills created before given date
+    """
+
+    skill = filters.NumberFilter()
+    category = filters.NumberFilter(field_name="skill__category")
+    user = filters.NumberFilter()
+    is_active = filters.BooleanFilter()
+
+    min_rating = filters.NumberFilter(field_name="rating", lookup_expr="gte")
+    min_experience = filters.NumberFilter(
+        field_name="years_of_experience", lookup_expr="gte"
+    )
+
+    proficiency_level = filters.ChoiceFilter(choices=UserSkill.ProficiencyLevel.choices)
+    min_proficiency = filters.NumberFilter(method="filter_min_proficiency")
+
+    has_students = filters.BooleanFilter(method="filter_has_students")
+    min_students = filters.NumberFilter(method="filter_min_students")
+
+    price_min = filters.NumberFilter(field_name="hourly_rate", lookup_expr="gte")
+    price_max = filters.NumberFilter(field_name="hourly_rate", lookup_expr="lte")
+
+    created_after = filters.DateTimeFilter(field_name="created_at", lookup_expr="gte")
+    created_before = filters.DateTimeFilter(field_name="created_at", lookup_expr="lte")
+
+    class Meta:
+        model = UserSkill
+        fields = [
+            "skill",
+            "category",
+            "user",
+            "is_active",
+            "proficiency_level",
+        ]
+
+    def filter_min_proficiency(self, queryset, name, value):
+        """Filter based on minimum proficiency level."""
+        proficiency_order = dict(UserSkill.ProficiencyLevel.choices)
+        min_level = [k for k, v in proficiency_order.items() if int(k) >= value]
+        return queryset.filter(proficiency_level__in=min_level)
+
+    def filter_has_students(self, queryset, name, value):
+        """Filter skills based on whether they have students."""
+        queryset = queryset.annotate(total_students=Count("exchanges", distinct=True))
+        return (
+            queryset.filter(total_students__gt=0)
+            if value
+            else queryset.filter(total_students=0)
+        )
+
+    def filter_min_students(self, queryset, name, value):
+        """Filter skills based on minimum number of students."""
+        return queryset.annotate(
+            total_students=Count("exchanges", distinct=True)
+        ).filter(total_students__gte=value)

@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import SkillCategoryViewSet
 from .views import SkillViewSet
+from .views import UserSkillViewSet
 
 app_name = "skillhub"
 
@@ -11,6 +12,7 @@ app_name = "skillhub"
 router = DefaultRouter()
 router.register(r"categories", SkillCategoryViewSet, basename="category")
 router.register(r"skills", SkillViewSet, basename="skill")
+router.register(r"teaching-skills", UserSkillViewSet, basename="teaching-skill")
 
 # The API URLs are now determined automatically by the router.
 urlpatterns = [

@@ -24,3 +24,52 @@ class AdminOrReadOnly(BasePermission):
             or request.user.is_staff
             or request.user.is_superuser
         )
+
+
+class IsOwnerOrAdmin(BasePermission):
+    """
+    Custom permission for UserSkill objects that allows:
+    - Admin/staff/superusers to perform any operation
+    - Regular users to perform operations only on their own skills
+    - Anyone to read active skills (list/retrieve)
+    """
+
+    def has_permission(self, request, view):
+        # Check if user is authenticated
+        if not request.user or not request.user.is_authenticated:
+            return False
+
+        # Allow admins full access
+        if (
+            request.user.role == "ADMIN"
+            or request.user.is_staff
+            or request.user.is_superuser
+        ):
+            return True
+
+        # Allow read operations for all authenticated users
+        if request.method in SAFE_METHODS:
+            return True
+
+        # For create operations, always allow authenticated users
+        if request.method == "POST":
+            return True
+
+        # For other methods, check object-level permissions
+        return True
+
+    def has_object_permission(self, request, view, obj):
+        # Allow admins full access
+        if (
+            request.user.role == "ADMIN"
+            or request.user.is_staff
+            or request.user.is_superuser
+        ):
+            return True
+
+        # Allow read operations for active skills
+        if request.method in SAFE_METHODS:
+            return obj.is_active or obj.user == request.user
+
+        # For other operations, check if user is the owner
+        return obj.user == request.user
