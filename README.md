@@ -158,3 +158,136 @@ backend/
 - Paginated list views
 - Optimized search functionality
 - Database indexing
+
+## Testing
+
+SkillSwap includes comprehensive unit tests for both the accounts and skillhub apps, following Django REST Framework best practices.
+
+### Running Tests
+
+#### Run All Tests
+```bash
+cd backend
+
+# Run all tests for both apps
+python manage.py test accounts.tests skillhub.tests
+
+# Run with verbose output
+python manage.py test accounts.tests skillhub.tests --verbosity=2
+
+# Run tests in parallel (faster)
+python manage.py test accounts.tests skillhub.tests --parallel
+```
+
+#### Run Tests for Specific App
+```bash
+# Accounts app tests
+python manage.py test accounts.tests
+
+# SkillHub app tests
+python manage.py test skillhub.tests
+```
+
+#### Run Specific Test Module
+```bash
+# Model tests
+python manage.py test accounts.tests.test_models
+python manage.py test skillhub.tests.test_models
+
+# Serializer tests
+python manage.py test accounts.tests.test_serializers
+python manage.py test skillhub.tests.test_serializers
+
+# View tests
+python manage.py test accounts.tests.test_views
+python manage.py test skillhub.tests.test_views
+```
+
+#### Run Specific Test Class
+```bash
+python manage.py test accounts.tests.test_models.UserModelTestCase
+python manage.py test skillhub.tests.test_models.SkillCategoryModelTestCase
+```
+
+#### Run Specific Test Method
+```bash
+python manage.py test accounts.tests.test_models.UserModelTestCase.test_create_user_with_valid_data
+```
+
+### Test Coverage
+
+#### Generate Coverage Report
+
+1. **Install coverage.py** (if not already installed):
+   ```bash
+   pip install coverage
+   ```
+
+2. **Run tests with coverage**:
+   ```bash
+   # Run tests and collect coverage data
+   coverage run --source='accounts,skillhub' manage.py test accounts.tests skillhub.tests
+   ```
+
+3. **View coverage report in terminal**:
+   ```bash
+   coverage report
+   ```
+
+   Example output:
+   ```
+   Name                              Stmts   Miss  Cover
+   -----------------------------------------------------
+   accounts/models.py                   73      3    96%
+   accounts/serializers.py             156      8    95%
+   accounts/views.py                   123      7    94%
+   skillhub/models.py                  145      6    96%
+   skillhub/serializers.py             234     12    95%
+   skillhub/views.py                   289     15    95%
+   -----------------------------------------------------
+   TOTAL                              1020     51    95%
+   ```
+
+4. **Generate HTML coverage report**:
+   ```bash
+   coverage html
+   ```
+
+   This creates an `htmlcov/` directory. Open `htmlcov/index.html` in your browser to view the detailed coverage report with highlighted code.
+
+5. **Generate XML coverage report** (for CI/CD):
+   ```bash
+   coverage xml
+   ```
+
+   This creates a `coverage.xml` file compatible with CI/CD tools like Jenkins, GitLab CI, GitHub Actions, etc.
+
+#### Using the Test Runner Script
+
+A convenient test runner script is provided:
+
+```bash
+# Make the script executable (first time only)
+chmod +x run_tests.sh
+
+# Run all tests with coverage
+./run_tests.sh
+
+# Run with verbose output
+./run_tests.sh -v
+
+# Run specific module
+./run_tests.sh -m test_models
+
+# Run in parallel
+./run_tests.sh -p
+
+# Stop on first failure
+./run_tests.sh -f
+
+# Show coverage report only (without running tests)
+./run_tests.sh -r
+
+# Run without coverage
+./run_tests.sh -n
+```
