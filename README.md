@@ -87,14 +87,19 @@ SkillSwap is a dynamic platform that facilitates peer-to-peer skill exchange and
    ```
 
 7. Create media directory for uploads:
-   ```bash
-   mkdir -p media/profile_pictures
-   ```
+    ```bash
+    mkdir -p media/profile_pictures
+    ```
 
-8. Run the development server:
-   ```bash
-   python manage.py runserver
-   ```
+8. Collect static files for local development purpose
+    ```bash
+    python manage.py collectstatic
+    ```
+
+9.  Run the development server:
+    ```bash
+    python manage.py runserver
+    ```
 
 ### Default Credentials
 

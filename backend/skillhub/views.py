@@ -842,40 +842,6 @@ class SkillFeedbackViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
     pagination_class = StandardResultsSetPagination
     throttle_classes = [ReviewRateThrottle]
-
-    def get_serializer_class(self):
-        """Return appropriate serializer class based on action."""
-        if self.action == "create":
-            return SkillFeedbackCreateSerializer
-        elif self.action in ["update", "partial_update"]:
-            return SkillFeedbackUpdateSerializer
-        elif self.action == "retrieve":
-            return SkillFeedbackDetailSerializer
-        return SkillFeedbackListSerializer
-
-    def get_queryset(self):
-        """
-        Get the queryset for feedback.
-        If requesting user is teacher: Show feedback received.
-        If student: Show feedback given and public feedback.
-        """
-        if getattr(self, "swagger_fake_view", False):  # Handles schema generation
-            return SkillFeedback.objects.none()
-
-        if not self.request.user.is_authenticated:
-            return SkillFeedback.objects.none()
-
-        # Use optimized query with correct relationships through exchange
-        return SkillFeedback.objects.select_related(
-            "exchange",
-            "exchange__user_skill",
-            "exchange__user_skill__skill",
-            "exchange__user_skill__user",
-            "exchange__learner",
-        )
-
-        return queryset
-
     search_fields = [
         "comment",
         "exchange__user_skill__skill__name",
@@ -890,6 +856,12 @@ class SkillFeedbackViewSet(viewsets.ModelViewSet):
         Get the list of feedback with optimized queries.
         Annotates additional fields and filters based on user role.
         """
+        if (
+            getattr(self, "swagger_fake_view", False)
+            or not self.request.user.is_authenticated
+        ):  # Handles schema generation
+            return SkillFeedback.objects.none()
+
         queryset = SkillFeedback.objects.select_related(
             "exchange",
             "exchange__user_skill",
@@ -927,7 +899,7 @@ class SkillFeedbackViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Create feedback for a completed exchange."""
-        serializer.save()  # All validation is done in serializer
+        serializer.save()
 
     def perform_update(self, serializer):
         """
@@ -1016,8 +988,6 @@ class SkillFeedbackViewSet(viewsets.ModelViewSet):
             return Response(stats)
 
         except Exception as e:
-            raise e
-
             return Response(
                 {"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

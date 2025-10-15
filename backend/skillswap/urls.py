@@ -38,8 +38,7 @@ urlpatterns = [
 ]
 
 # Add documentation URLs based on environment
-if settings.DEBUG or not settings.DEBUG:  # Available in both dev and prod
-    urlpatterns.extend(doc_patterns)
+urlpatterns.extend(doc_patterns)
 
 # Serve static and media files in development
 if settings.DEBUG:
