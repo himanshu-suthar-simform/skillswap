@@ -1,0 +1,66 @@
+[
+  {
+    "model": "accounts.profile",
+    "pk": 1,
+    "fields": {
+      "user": 1,
+      "bio": "Admin User",
+      "profile_picture": "",
+      "phone_number": "1234567890",
+      "location": "India",
+      "timezone": "UTC",
+      "language_preference": "en",
+      "is_available": true,
+      "created_at": "2025-10-15T06:43:23.847Z",
+      "updated_at": "2025-10-15T06:43:23.848Z"
+    }
+  },
+  {
+    "model": "accounts.profile",
+    "pk": 2,
+    "fields": {
+      "user": 2,
+      "bio": "Python Developer with 10+ years of experience",
+      "profile_picture": "",
+      "phone_number": "3451234",
+      "location": "India",
+      "timezone": "UTC",
+      "language_preference": "en",
+      "is_available": true,
+      "created_at": "2025-10-15T06:45:45.913Z",
+      "updated_at": "2025-10-15T06:45:45.913Z"
+    }
+  },
+  {
+    "model": "accounts.profile",
+    "pk": 3,
+    "fields": {
+      "user": 3,
+      "bio": "Structural Engineer, known for Prison break",
+      "profile_picture": "",
+      "phone_number": "456456456",
+      "location": "USA",
+      "timezone": "UTC",
+      "language_preference": "en",
+      "is_available": true,
+      "created_at": "2025-10-15T06:46:36.075Z",
+      "updated_at": "2025-10-15T06:46:36.075Z"
+    }
+  },
+  {
+    "model": "accounts.profile",
+    "pk": 4,
+    "fields": {
+      "user": 4,
+      "bio": "Java Developer with 6 years of experience",
+      "profile_picture": "",
+      "phone_number": "333444555",
+      "location": "China",
+      "timezone": "UTC",
+      "language_preference": "en",
+      "is_available": true,
+      "created_at": "2025-10-15T06:47:23.254Z",
+      "updated_at": "2025-10-15T06:47:23.254Z"
+    }
+  }
+]

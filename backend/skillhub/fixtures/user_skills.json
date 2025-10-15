@@ -1,0 +1,68 @@
+[
+    {
+        "model": "skillhub.userskill",
+        "pk": 1,
+        "fields": {
+            "user": 2,
+            "skill": 1,
+            "proficiency_level": "ADVANCED",
+            "years_of_experience": 10,
+            "certifications": "Python For Everybody",
+            "portfolio_links": "google.com",
+            "prerequisites": "- Basics of Python\r\n- OOPs concepts",
+            "learning_outcomes": "Industry knowledge",
+            "teaching_methods": "Lecture Method",
+            "estimated_duration": 50,
+            "duration_type": "HOURS",
+            "is_active": true,
+            "max_students": 5,
+            "available_time_slots": "9PM Weekdays\r\n9AM Weekends",
+            "created_at": "2025-10-15T06:54:34.380Z",
+            "updated_at": "2025-10-15T06:54:34.380Z"
+        }
+    },
+    {
+        "model": "skillhub.userskill",
+        "pk": 2,
+        "fields": {
+            "user": 3,
+            "skill": 3,
+            "proficiency_level": "EXPERT",
+            "years_of_experience": 12,
+            "certifications": "Prison break",
+            "portfolio_links": "google.com",
+            "prerequisites": "- Structural Engineering Basics\r\n- Physics and Maths",
+            "learning_outcomes": "- Learning how to break Prison",
+            "teaching_methods": "Direct Method",
+            "estimated_duration": 30,
+            "duration_type": "HOURS",
+            "is_active": true,
+            "max_students": 10,
+            "available_time_slots": "9AM Weekends",
+            "created_at": "2025-10-15T07:00:47.374Z",
+            "updated_at": "2025-10-15T07:00:47.374Z"
+        }
+    },
+    {
+        "model": "skillhub.userskill",
+        "pk": 3,
+        "fields": {
+            "user": 4,
+            "skill": 2,
+            "proficiency_level": "ADVANCED",
+            "years_of_experience": 7,
+            "certifications": "Java for Everyone",
+            "portfolio_links": "google.com",
+            "prerequisites": "- Basics of Programming\r\n- OOPs",
+            "learning_outcomes": "Industry Ready",
+            "teaching_methods": "Online",
+            "estimated_duration": 40,
+            "duration_type": "HOURS",
+            "is_active": true,
+            "max_students": 5,
+            "available_time_slots": "9 AM Weekends",
+            "created_at": "2025-10-15T07:03:01.993Z",
+            "updated_at": "2025-10-15T07:03:01.993Z"
+        }
+    }
+]

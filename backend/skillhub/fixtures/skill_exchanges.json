@@ -1,0 +1,47 @@
+[
+    {
+        "model": "skillhub.skillexchange",
+        "pk": 1,
+        "fields": {
+            "user_skill": 1,
+            "learner": 3,
+            "status": "COMPLETED",
+            "learning_goals": "- Python overview\r\n- Projects\r\n- Industry knowledge",
+            "availability": "- Daily 9PM",
+            "proposed_duration": 30,
+            "notes": "Knwoledge Sharing",
+            "created_at": "2025-10-15T07:03:56.427Z",
+            "updated_at": "2025-10-15T07:03:56.427Z"
+        }
+    },
+    {
+        "model": "skillhub.skillexchange",
+        "pk": 2,
+        "fields": {
+            "user_skill": 3,
+            "learner": 2,
+            "status": "IN_PROGRESS",
+            "learning_goals": "- Java Overview\r\n- Industry Ready",
+            "availability": "Daily 10PM",
+            "proposed_duration": 40,
+            "notes": "Knowledge Sharing",
+            "created_at": "2025-10-15T07:04:42.963Z",
+            "updated_at": "2025-10-15T07:04:42.963Z"
+        }
+    },
+    {
+        "model": "skillhub.skillexchange",
+        "pk": 3,
+        "fields": {
+            "user_skill": 2,
+            "learner": 2,
+            "status": "PENDING",
+            "learning_goals": "- Prison break techniques",
+            "availability": "Weekends 9AM",
+            "proposed_duration": 20,
+            "notes": "Knowledge Sharing",
+            "created_at": "2025-10-15T07:05:20.722Z",
+            "updated_at": "2025-10-15T07:05:20.722Z"
+        }
+    }
+]

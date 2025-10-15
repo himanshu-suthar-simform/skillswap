@@ -1,0 +1,106 @@
+[
+    {
+        "model": "skillhub.skillmilestone",
+        "pk": 1,
+        "fields": {
+            "user_skill": 1,
+            "title": "Day1: Python Overview",
+            "description": "- Programming\r\n- Python history\r\n- Python documentation",
+            "order": 1,
+            "estimated_hours": 4,
+            "created_at": "2025-10-15T06:54:34.381Z",
+            "updated_at": "2025-10-15T06:54:34.381Z"
+        }
+    },
+    {
+        "model": "skillhub.skillmilestone",
+        "pk": 2,
+        "fields": {
+            "user_skill": 1,
+            "title": "Day2: Python Variables & Constants",
+            "description": "- Variables\r\n- Constants\r\n- Real world use cases",
+            "order": 2,
+            "estimated_hours": 8,
+            "created_at": "2025-10-15T06:54:34.381Z",
+            "updated_at": "2025-10-15T06:54:34.381Z"
+        }
+    },
+    {
+        "model": "skillhub.skillmilestone",
+        "pk": 3,
+        "fields": {
+            "user_skill": 1,
+            "title": "Day3: Python Data Structures & Data Types",
+            "description": "- List, Tuple, Sets, Dict\r\n- Stack, Queue, WeekReference, Hashmap\r\n- Dataclasses, OOPs",
+            "order": 3,
+            "estimated_hours": 12,
+            "created_at": "2025-10-15T06:54:34.381Z",
+            "updated_at": "2025-10-15T06:54:34.381Z"
+        }
+    },
+    {
+        "model": "skillhub.skillmilestone",
+        "pk": 4,
+        "fields": {
+            "user_skill": 2,
+            "title": "Day1: Basics of Physics & Maths for Structural Engineering",
+            "description": "Structuring Engineering Refresher for Maths & Physics",
+            "order": 1,
+            "estimated_hours": 10,
+            "created_at": "2025-10-15T07:00:47.374Z",
+            "updated_at": "2025-10-15T07:00:47.375Z"
+        }
+    },
+    {
+        "model": "skillhub.skillmilestone",
+        "pk": 5,
+        "fields": {
+            "user_skill": 2,
+            "title": "Day2: Live Concept of Breaking",
+            "description": "- Breaking Gates\r\n- Learning Maps & Architecture",
+            "order": 2,
+            "estimated_hours": 20,
+            "created_at": "2025-10-15T07:00:47.375Z",
+            "updated_at": "2025-10-15T07:00:47.375Z"
+        }
+    },
+    {
+        "model": "skillhub.skillmilestone",
+        "pk": 6,
+        "fields": {
+            "user_skill": 3,
+            "title": "Day1: Java Overivew",
+            "description": "- Tools, Setup, Java Overview\r\n- Java Syntax",
+            "order": 1,
+            "estimated_hours": 5,
+            "created_at": "2025-10-15T07:03:01.994Z",
+            "updated_at": "2025-10-15T07:03:01.994Z"
+        }
+    },
+    {
+        "model": "skillhub.skillmilestone",
+        "pk": 7,
+        "fields": {
+            "user_skill": 3,
+            "title": "Day2: Java Variables & Constants",
+            "description": "- Hello world program\r\n- Variables\r\n- Constants",
+            "order": 2,
+            "estimated_hours": 10,
+            "created_at": "2025-10-15T07:03:01.994Z",
+            "updated_at": "2025-10-15T07:03:01.994Z"
+        }
+    },
+    {
+        "model": "skillhub.skillmilestone",
+        "pk": 8,
+        "fields": {
+            "user_skill": 3,
+            "title": "Day3: Java Data Structures & Data Types",
+            "description": "- Data Structures and Types\r\n- OOPs",
+            "order": 3,
+            "estimated_hours": 10,
+            "created_at": "2025-10-15T07:03:01.994Z",
+            "updated_at": "2025-10-15T07:03:01.994Z"
+        }
+    }
+]
