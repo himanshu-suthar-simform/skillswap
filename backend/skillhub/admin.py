@@ -211,25 +211,25 @@ class SkillFeedbackAdmin(admin.ModelAdmin):
     list_display = (
         "get_skill_name",
         "get_teacher_name",
-        "student",
+        "get_learner_name",
         "display_rating",
         "is_recommended",
         "created_at",
     )
     list_filter = (
         "is_recommended",
-        "user_skill__skill__category",
+        "exchange__user_skill__skill__category",
         "created_at",
         ("rating", admin.EmptyFieldListFilter),
     )
     search_fields = (
-        "user_skill__skill__name",
-        "user_skill__user__email",
-        "user_skill__user__first_name",
-        "user_skill__user__last_name",
-        "student__email",
-        "student__first_name",
-        "student__last_name",
+        "exchange__user_skill__skill__name",
+        "exchange__user_skill__user__email",
+        "exchange__user_skill__user__first_name",
+        "exchange__user_skill__user__last_name",
+        "exchange__learner__email",
+        "exchange__learner__first_name",
+        "exchange__learner__last_name",
         "comment",
     )
     readonly_fields = ("created_at", "updated_at")
@@ -249,6 +249,14 @@ class SkillFeedbackAdmin(admin.ModelAdmin):
     get_teacher_name.short_description = _("Teacher")
     get_teacher_name.admin_order_field = "user_skill__user__first_name"
 
+    def get_learner_name(self, obj):
+        """Display learner name."""
+        user = obj.exchange.learner
+        return user.get_full_name() or user.email
+
+    get_learner_name.short_description = _("Learner")
+    get_learner_name.admin_order_field = "exchange__learner__first_name"
+
     def display_rating(self, obj):
         """Display rating with stars."""
         if obj.rating is None:
@@ -264,7 +272,11 @@ class SkillFeedbackAdmin(admin.ModelAdmin):
             super()
             .get_queryset(request)
             .select_related(
-                "user_skill", "user_skill__user", "user_skill__skill", "student"
+                "exchange",
+                "exchange__user_skill",
+                "exchange__user_skill__user",
+                "exchange__user_skill__skill",
+                "exchange__learner",
             )
         )
 

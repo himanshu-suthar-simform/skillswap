@@ -2,6 +2,7 @@ from accounts.models import User
 from django.core.validators import MaxValueValidator
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 
@@ -229,10 +230,11 @@ class UserSkill(models.Model):
     @property
     def average_rating(self):
         """Calculate average rating from feedback."""
+        # Get feedback through exchanges
         avg = (
-            self.feedback_received.aggregate(avg_rating=models.Avg("rating"))[
-                "avg_rating"
-            ]
+            self.exchanges.filter(feedback__isnull=False).aggregate(
+                avg_rating=models.Avg("feedback__rating")
+            )["avg_rating"]
             or 0.00
         )
         return round(avg, 2)
@@ -249,7 +251,7 @@ class UserSkill(models.Model):
     @property
     def total_feedback_count(self):
         """Get total number of feedback received."""
-        return self.feedback_received.count()
+        return self.exchanges.filter(feedback__isnull=False).count()
 
 
 class SkillMilestone(models.Model):
@@ -287,62 +289,6 @@ class SkillMilestone(models.Model):
         return f"{self.user_skill} - Milestone {self.order}: {self.title}"
 
 
-class SkillFeedback(models.Model):
-    """
-    Feedback and ratings from students for a specific teacher's skill.
-    Helps maintain quality and provide social proof.
-    """
-
-    user_skill = models.ForeignKey(
-        UserSkill,
-        on_delete=models.CASCADE,
-        related_name="feedback_received",
-        verbose_name=_("user skill"),
-    )
-    student = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="feedback_given",
-        verbose_name=_("student"),
-    )
-    rating = models.DecimalField(
-        _("rating"),
-        max_digits=3,
-        decimal_places=2,
-        validators=[MinValueValidator(0.00), MaxValueValidator(5.00)],
-        help_text=_("Rating from 0 to 5"),
-        null=True,
-        blank=True,
-    )
-    comment = models.TextField(_("comment"))
-    is_recommended = models.BooleanField(
-        _("recommended"),
-        default=True,
-        help_text=_("Would you recommend this skill/teacher to others?"),
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = _("skill feedback")
-        verbose_name_plural = _("skill feedback")
-        ordering = ["-created_at"]
-        unique_together = ["user_skill", "student"]  # Changed from skill to user_skill
-        indexes = [
-            models.Index(
-                fields=["user_skill", "-created_at"]
-            ),  # Changed from skill to user_skill
-            models.Index(fields=["-rating", "-created_at"]),
-        ]
-
-    def __str__(self):
-        return f"Feedback for {self.user_skill} by {self.student.get_full_name() or self.student.email}"
-
-    def save(self, *args, **kwargs):
-        """Override save to perform any future validations."""
-        super().save(*args, **kwargs)
-
-
 class SkillExchange(models.Model):
     """
     Model to track skill exchanges between users.
@@ -357,7 +303,7 @@ class SkillExchange(models.Model):
         CANCELLED = "CANCELLED", _("Cancelled")
 
     user_skill = models.ForeignKey(
-        UserSkill,
+        "UserSkill",
         on_delete=models.PROTECT,
         related_name="exchanges",
         verbose_name=_("teacher skill"),
@@ -414,3 +360,76 @@ class SkillExchange(models.Model):
     def teacher(self):
         """Alias for get_teacher for consistency."""
         return self.get_teacher()
+
+
+class SkillFeedback(models.Model):
+    """
+    Feedback and ratings from students for a completed skill exchange.
+    Helps maintain quality and provide social proof.
+    Each feedback is tied to a specific exchange to ensure proper tracking
+    and verification of the learning relationship.
+    """
+
+    exchange = models.OneToOneField(
+        "SkillExchange",
+        on_delete=models.CASCADE,
+        related_name="feedback",
+        verbose_name=_("exchange"),
+        help_text=_("The completed exchange for which feedback is being given"),
+    )
+    rating = models.DecimalField(
+        _("rating"),
+        max_digits=3,
+        decimal_places=2,
+        validators=[MinValueValidator(0.00), MaxValueValidator(5.00)],
+        help_text=_("Rating from 0 to 5"),
+        null=True,
+        blank=True,
+    )
+    comment = models.TextField(_("comment"))
+    is_recommended = models.BooleanField(
+        _("recommended"),
+        default=True,
+        help_text=_("Would you recommend this skill/teacher to others?"),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("skill feedback")
+        verbose_name_plural = _("skill feedback")
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["exchange", "-created_at"]),
+            models.Index(fields=["-rating", "-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"Feedback for {self.exchange.user_skill} by {self.exchange.learner.get_full_name() or self.exchange.learner.email}"
+
+    @property
+    def user_skill(self):
+        """Get the associated user skill for backward compatibility."""
+        return self.exchange.user_skill
+
+    @property
+    def student(self):
+        """Get the student (learner) for backward compatibility."""
+        return self.exchange.learner
+
+    @property
+    def is_within_update_window(self):
+        """
+        Check if feedback can still be updated (within 72 hours of creation).
+        Returns True if feedback was created less than 72 hours ago.
+        """
+
+        if not self.created_at:
+            return True  # New feedback can always be updated
+
+        window = timezone.timedelta(hours=72)
+        return (timezone.now() - self.created_at) <= window
+
+    def save(self, *args, **kwargs):
+        """Override save to perform any future validations."""
+        super().save(*args, **kwargs)

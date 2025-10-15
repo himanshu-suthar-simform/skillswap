@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from accounts.serializers import UserBasicSerializer
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -432,6 +434,42 @@ class SkillExchangeListSerializer(serializers.ModelSerializer):
         }
 
 
+class SkillExchangeStatusUpdateSerializer(serializers.Serializer):
+    """Serializer for updating skill exchange status."""
+
+    status = serializers.ChoiceField(
+        choices=SkillExchange.Status.choices, help_text=_("New status for the exchange")
+    )
+    reason = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text=_(
+            "Required reason when cancelling, optional for other status changes"
+        ),
+    )
+
+    def validate(self, data):
+        """Validate that reason is provided when status is CANCELLED."""
+        status = data.get("status")
+        reason = data.get("reason")
+
+        if status == SkillExchange.Status.CANCELLED:
+            if not reason:
+                raise serializers.ValidationError(
+                    {"reason": _("Reason is required when cancelling an exchange.")}
+                )
+            if len(reason.strip()) < 10:
+                raise serializers.ValidationError(
+                    {
+                        "reason": _(
+                            "Please provide a more detailed reason for cancellation (at least 10 characters)."
+                        )
+                    }
+                )
+
+        return data
+
+
 class SkillExchangeDetailSerializer(serializers.ModelSerializer):
     """
     Serializer for detailed skill exchange information.
@@ -580,9 +618,11 @@ class SkillFeedbackListSerializer(serializers.ModelSerializer):
     Includes basic information needed for list views.
     """
 
-    teacher_name = serializers.CharField(source="user_skill.user.get_full_name")
-    student_name = serializers.CharField(source="student.get_full_name")
-    skill_name = serializers.CharField(source="user_skill.skill.name")
+    teacher_name = serializers.CharField(
+        source="exchange.user_skill.user.get_full_name"
+    )
+    student_name = serializers.CharField(source="exchange.learner.get_full_name")
+    skill_name = serializers.CharField(source="exchange.user_skill.skill.name")
     days_ago = serializers.SerializerMethodField()
 
     class Meta:
@@ -614,15 +654,22 @@ class SkillFeedbackDetailSerializer(serializers.ModelSerializer):
     Used for retrieving complete feedback information.
     """
 
-    teacher_skill = UserSkillListSerializer(source="user_skill", read_only=True)
-    student_name = serializers.CharField(source="student.get_full_name", read_only=True)
+    teacher_skill = UserSkillListSerializer(
+        source="exchange.user_skill", read_only=True
+    )
+    student_name = serializers.CharField(
+        source="exchange.learner.get_full_name", read_only=True
+    )
     is_within_update_window = serializers.BooleanField(read_only=True)
     days_ago = serializers.SerializerMethodField()
+    exchange_details = SkillExchangeListSerializer(source="exchange", read_only=True)
 
     class Meta:
         model = SkillFeedback
         fields = [
             "id",
+            "exchange",
+            "exchange_details",
             "teacher_skill",
             "student_name",
             "rating",
@@ -634,6 +681,7 @@ class SkillFeedbackDetailSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = [
+            "exchange",
             "created_at",
             "updated_at",
             "is_within_update_window",
@@ -657,7 +705,6 @@ class SkillFeedbackCreateSerializer(serializers.ModelSerializer):
 
     exchange = serializers.PrimaryKeyRelatedField(
         queryset=SkillExchange.objects.filter(status=SkillExchange.Status.COMPLETED),
-        write_only=True,
         help_text=_("The completed exchange for which feedback is being given."),
     )
 
@@ -670,13 +717,48 @@ class SkillFeedbackCreateSerializer(serializers.ModelSerializer):
             "is_recommended",
         ]
 
+    def validate_exchange(self, value):
+        """
+        Validate that:
+        1. Exchange is completed
+        2. No existing feedback
+        3. Current user is the learner
+        """
+        if value.status != SkillExchange.Status.COMPLETED:
+            raise serializers.ValidationError(
+                _("Can only provide feedback for completed exchanges.")
+            )
+
+        if hasattr(value, "feedback"):
+            raise serializers.ValidationError(
+                _("Feedback has already been provided for this exchange.")
+            )
+
+        if value.learner != self.context["request"].user:
+            raise serializers.ValidationError(
+                _(
+                    "You can only provide feedback for exchanges where you were the learner."
+                )
+            )
+
+        return value
+
     def validate_rating(self, value):
         """
         Validate rating:
         - Must be between 0 and 5
         - Must be in 0.5 increments
         """
-        if not (0 <= value <= 5):
+
+        if value is None:
+            return value
+
+        try:
+            value = Decimal(str(value))
+        except (TypeError, ValueError):
+            raise serializers.ValidationError(_("Rating must be a valid number."))
+
+        if not (Decimal("0") <= value <= Decimal("5")):
             raise serializers.ValidationError(_("Rating must be between 0 and 5."))
 
         if value * 2 != int(value * 2):
@@ -735,7 +817,17 @@ class SkillFeedbackUpdateSerializer(serializers.ModelSerializer):
         - Must be between 0 and 5
         - Must be in 0.5 increments
         """
-        if not (0 <= value <= 5):
+        from decimal import Decimal
+
+        if value is None:
+            return value
+
+        try:
+            value = Decimal(str(value))
+        except (TypeError, ValueError):
+            raise serializers.ValidationError(_("Rating must be a valid number."))
+
+        if not (Decimal("0") <= value <= Decimal("5")):
             raise serializers.ValidationError(_("Rating must be between 0 and 5."))
 
         if value * 2 != int(value * 2):

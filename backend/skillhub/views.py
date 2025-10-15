@@ -36,6 +36,7 @@ from .serializers import SkillCategorySerializer
 from .serializers import SkillDetailSerializer
 from .serializers import SkillExchangeDetailSerializer
 from .serializers import SkillExchangeListSerializer
+from .serializers import SkillExchangeStatusUpdateSerializer
 from .serializers import SkillFeedbackCreateSerializer
 from .serializers import SkillFeedbackDetailSerializer
 from .serializers import SkillFeedbackListSerializer
@@ -71,11 +72,33 @@ class SkillCategoryViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """
-        Get the list of categories with optimized queries.
-        Annotates the queryset with counts of active skills.
+        Get filtered queryset based on user's role:
+        - Students can see their own feedback
+        - Teachers can see feedback for their skills
+        - Admins can see all feedback
         """
-        return self.queryset.annotate(
-            active_skills_count=Count("skills", filter=models.Q(skills__is_active=True))
+        queryset = super().get_queryset()
+
+        if self.request.user.is_staff:
+            return queryset.select_related(
+                "exchange",
+                "exchange__user_skill",
+                "exchange__user_skill__skill",
+                "exchange__user_skill__user",
+                "exchange__learner",
+            )
+
+        return queryset.select_related(
+            "exchange",
+            "exchange__user_skill",
+            "exchange__user_skill__skill",
+            "exchange__user_skill__user",
+            "exchange__learner",
+        ).filter(
+            Q(exchange__learner=self.request.user)  # Student's own feedback
+            | Q(
+                exchange__user_skill__user=self.request.user
+            )  # Teacher's received feedback
         )
 
     @extend_schema(
@@ -330,7 +353,7 @@ class UserSkillViewSet(viewsets.ModelViewSet):
         if self.action == "list":
             queryset = queryset.annotate(
                 student_count=Count("exchanges", distinct=True),
-                rating=Avg("feedback_received__rating"),
+                rating=Avg("exchanges__feedback__rating"),
             )
         else:
             # For detail view, add more annotations and prefetch related data
@@ -339,8 +362,10 @@ class UserSkillViewSet(viewsets.ModelViewSet):
                     "milestones",
                     queryset=SkillMilestone.objects.order_by("order"),
                 ),
-                "feedback_received",
-                "exchanges",
+                Prefetch(
+                    "exchanges",
+                    queryset=SkillExchange.objects.select_related("feedback"),
+                ),
             ).annotate(
                 student_count=Count("exchanges", distinct=True),
                 completed_count=Count(
@@ -348,7 +373,7 @@ class UserSkillViewSet(viewsets.ModelViewSet):
                     filter=models.Q(exchanges__status="COMPLETED"),
                     distinct=True,
                 ),
-                rating=Avg("feedback_received__rating"),
+                rating=Avg("exchanges__feedback__rating"),
                 # Calculate success rate using ExpressionWrapper to avoid division by zero
                 _success_rate=models.ExpressionWrapper(
                     models.Case(
@@ -588,7 +613,7 @@ class UserSkillViewSet(viewsets.ModelViewSet):
         Soft delete if there are associated records.
         Hard delete if no associated records exist.
         """
-        if instance.exchanges.exists() or instance.feedback_received.exists():
+        if instance.exchanges.exists():
             instance.is_active = False
             instance.save()
         else:
@@ -664,20 +689,7 @@ class SkillExchangeViewSet(viewsets.ModelViewSet):
     @extend_schema(
         summary="Update exchange status",
         description="Update the status of an exchange request",
-        request={
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "string",
-                    "enum": ["ACCEPTED", "IN_PROGRESS", "COMPLETED", "CANCELLED"],
-                },
-                "reason": {
-                    "type": "string",
-                    "description": "Optional reason for rejection or cancellation",
-                },
-            },
-            "required": ["status"],
-        },
+        request=SkillExchangeStatusUpdateSerializer,
         responses={
             200: SkillExchangeDetailSerializer,
             400: {"description": "Invalid request"},
@@ -689,14 +701,16 @@ class SkillExchangeViewSet(viewsets.ModelViewSet):
     def update_status(self, request, pk=None):
         """Generic endpoint to update exchange status with proper validations."""
         exchange = self.get_object()
-        new_status = request.data.get("status")
-        reason = request.data.get("reason")
 
-        if not new_status:
+        # Validate request data using serializer
+        status_serializer = SkillExchangeStatusUpdateSerializer(data=request.data)
+        if not status_serializer.is_valid():
             return Response(
-                {"detail": _("Status is required.")},
-                status=status.HTTP_400_BAD_REQUEST,
+                status_serializer.errors, status=status.HTTP_400_BAD_REQUEST
             )
+
+        new_status = status_serializer.validated_data["status"]
+        reason = status_serializer.validated_data.get("reason")
 
         if new_status not in SkillExchange.Status:
             return Response(
@@ -803,7 +817,7 @@ class SkillExchangeViewSet(viewsets.ModelViewSet):
 @extend_schema(tags=["Skill Feedback"])
 class SkillFeedbackViewSet(viewsets.ModelViewSet):
     """
-    ViewSet for managing feedback on teaching skills.
+    ViewSet for managing feedback on completed skill exchanges.
 
     Features:
     - List feedback with filtering and search
@@ -822,15 +836,29 @@ class SkillFeedbackViewSet(viewsets.ModelViewSet):
     Validation:
     - One feedback per exchange
     - Exchange must be completed
-    - Student must be the exchange participant
+    - Learner must be the exchange participant
     - Rating must be between 0 and 5
     - Comments must meet minimum length requirements
+
+    Relationships:
+    - Feedback is now directly linked to SkillExchange
+    - Access to UserSkill and User information through exchange
     """
 
-    queryset = SkillFeedback.objects.all()  # Prevents schema generation issues
+    queryset = SkillFeedback.objects.all()
     permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
     pagination_class = StandardResultsSetPagination
     throttle_classes = [ReviewRateThrottle]
+
+    def get_serializer_class(self):
+        """Return appropriate serializer class based on action."""
+        if self.action == "create":
+            return SkillFeedbackCreateSerializer
+        elif self.action in ["update", "partial_update"]:
+            return SkillFeedbackUpdateSerializer
+        elif self.action == "retrieve":
+            return SkillFeedbackDetailSerializer
+        return SkillFeedbackListSerializer
 
     def get_queryset(self):
         """
@@ -841,21 +869,25 @@ class SkillFeedbackViewSet(viewsets.ModelViewSet):
         if getattr(self, "swagger_fake_view", False):  # Handles schema generation
             return SkillFeedback.objects.none()
 
-        queryset = SkillFeedback.objects.select_related(
-            "user_skill", "user_skill__user", "user_skill__skill", "student"
-        ).all()
-
-        # Only show feedback for authenticated users
         if not self.request.user.is_authenticated:
             return SkillFeedback.objects.none()
+
+        # Use optimized query with correct relationships through exchange
+        return SkillFeedback.objects.select_related(
+            "exchange",
+            "exchange__user_skill",
+            "exchange__user_skill__skill",
+            "exchange__user_skill__user",
+            "exchange__learner",
+        )
 
         return queryset
 
     search_fields = [
         "comment",
-        "user_skill__skill__name",
-        "user_skill__user__username",
-        "student__username",
+        "exchange__user_skill__skill__name",
+        "exchange__user_skill__user__username",
+        "exchange__learner__username",
     ]
     ordering_fields = ["created_at", "rating", "is_recommended"]
     ordering = ["-created_at"]
@@ -866,26 +898,26 @@ class SkillFeedbackViewSet(viewsets.ModelViewSet):
         Annotates additional fields and filters based on user role.
         """
         queryset = SkillFeedback.objects.select_related(
-            "user_skill",
-            "user_skill__skill",
-            "user_skill__user",
-            "student",
             "exchange",
+            "exchange__user_skill",
+            "exchange__user_skill__skill",
+            "exchange__user_skill__user",
+            "exchange__learner",
         )
 
         # For regular users, show only:
-        # 1. Feedback they've given
+        # 1. Feedback they've given as learners
         # 2. Feedback on their teaching skills
-        # 3. Public feedback on other teaching skills
         if not (
             self.request.user.role == "ADMIN"
             or self.request.user.is_staff
             or self.request.user.is_superuser
         ):
             queryset = queryset.filter(
-                models.Q(student=self.request.user)
-                | models.Q(user_skill__user=self.request.user)
-                | models.Q(is_public=True)
+                models.Q(exchange__learner=self.request.user)  # Feedback given
+                | models.Q(
+                    exchange__user_skill__user=self.request.user
+                )  # Feedback received
             )
 
         return queryset
@@ -901,36 +933,8 @@ class SkillFeedbackViewSet(viewsets.ModelViewSet):
         return SkillFeedbackDetailSerializer
 
     def perform_create(self, serializer):
-        """
-        Create feedback for a completed exchange.
-        Validates exchange completion and one feedback per exchange rule.
-        """
-        exchange = serializer.validated_data["exchange"]
-
-        # Ensure exchange is completed
-        if exchange.status != SkillExchange.Status.COMPLETED:
-            raise ValidationError(
-                {"exchange": _("Can only provide feedback for completed exchanges.")}
-            )
-
-        # Ensure student is the exchange participant
-        if exchange.learner != self.request.user:
-            raise ValidationError(
-                {"exchange": _("You can only provide feedback for your own exchanges.")}
-            )
-
-        # Ensure no existing feedback for this exchange
-        if SkillFeedback.objects.filter(exchange=exchange).exists():
-            raise ValidationError(
-                {"exchange": _("Feedback has already been provided for this exchange.")}
-            )
-
-        # Set the student and user_skill from the exchange
-        serializer.save(
-            student=self.request.user,
-            user_skill=exchange.user_skill,
-            exchange=exchange,
-        )
+        """Create feedback for a completed exchange."""
+        serializer.save()  # All validation is done in serializer
 
     def perform_update(self, serializer):
         """
@@ -970,8 +974,8 @@ class SkillFeedbackViewSet(viewsets.ModelViewSet):
     def get_stats(self, request, user_skill_id=None):
         """Get aggregated feedback statistics for a teaching skill."""
         try:
-            # Get the queryset for the specific user_skill
-            queryset = self.get_queryset().filter(user_skill_id=user_skill_id)
+            # Get the queryset for the specific user_skill through exchange relationship
+            queryset = self.get_queryset().filter(exchange__user_skill_id=user_skill_id)
 
             # Calculate statistics
             stats = queryset.aggregate(
