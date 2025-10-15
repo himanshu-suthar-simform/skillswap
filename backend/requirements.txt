@@ -3,6 +3,7 @@ attrs==25.4.0
 black==25.9.0
 cfgv==3.4.0
 click==8.3.0
+coverage==7.10.7
 distlib==0.4.0
 Django==5.2.7
 django-cors-headers==4.9.0

@@ -28,6 +28,7 @@ from .serializers import UserRegistrationSerializer
 
 @extend_schema(
     tags=["Authentication"],
+    auth=[],
     description="Register a new user account",
     responses={
         201: OpenApiResponse(

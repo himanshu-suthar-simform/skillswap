@@ -206,7 +206,11 @@ class SkillDetailSerializer(serializers.ModelSerializer):
         Cross-field validation:
         - Ensure category is active when creating/updating an active skill
         """
-        if data.get("is_active", True) and not data["category"].is_active:
+        category = data.get(
+            "category", self.instance.category if self.instance else None
+        )
+
+        if data.get("is_active", True) and (category and not category.is_active):
             raise serializers.ValidationError(
                 {
                     "category": _(

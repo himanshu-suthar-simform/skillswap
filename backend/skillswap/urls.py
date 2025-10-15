@@ -43,6 +43,5 @@ if settings.DEBUG or not settings.DEBUG:  # Available in both dev and prod
 
 # Serve static and media files in development
 if settings.DEBUG:
-    print("Serving static and media files in development")
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -72,33 +72,11 @@ class SkillCategoryViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """
-        Get filtered queryset based on user's role:
-        - Students can see their own feedback
-        - Teachers can see feedback for their skills
-        - Admins can see all feedback
+        Get the list of categories with optimized queries.
+        Annotates the queryset with counts of active skills.
         """
-        queryset = super().get_queryset()
-
-        if self.request.user.is_staff:
-            return queryset.select_related(
-                "exchange",
-                "exchange__user_skill",
-                "exchange__user_skill__skill",
-                "exchange__user_skill__user",
-                "exchange__learner",
-            )
-
-        return queryset.select_related(
-            "exchange",
-            "exchange__user_skill",
-            "exchange__user_skill__skill",
-            "exchange__user_skill__user",
-            "exchange__learner",
-        ).filter(
-            Q(exchange__learner=self.request.user)  # Student's own feedback
-            | Q(
-                exchange__user_skill__user=self.request.user
-            )  # Teacher's received feedback
+        return self.queryset.annotate(
+            active_skills_count=Count("skills", filter=models.Q(skills__is_active=True))
         )
 
     @extend_schema(
@@ -477,10 +455,27 @@ class UserSkillViewSet(viewsets.ModelViewSet):
             404: {"description": "Milestone not found"},
         },
     )
+    @extend_schema(
+        summary="Update milestone",
+        description="Update an existing milestone.",
+        parameters=[
+            OpenApiParameter(
+                name="milestone_id",
+                location=OpenApiParameter.PATH,
+                type=int,
+                description="ID of the milestone to update",
+            ),
+        ],
+        request=SkillMilestoneSerializer,
+        responses={
+            200: SkillMilestoneSerializer,
+            404: {"description": "Milestone not found"},
+        },
+    )
     @action(
         detail=True,
         methods=["put", "patch"],
-        url_path="milestone/(?P<milestone_id>[^/.]+)",
+        url_path=r"milestones/(?P<milestone_id>\d+)",  # Changed the URL pattern
     )
     def update_milestone(self, request, pk=None, milestone_id=None):
         """Update a specific milestone."""
@@ -670,9 +665,7 @@ class SkillExchangeViewSet(viewsets.ModelViewSet):
             )
 
         # For other actions, include prefetch for detailed view
-        return base_qs.prefetch_related(
-            "user_skill__milestones", "user_skill__feedback_received"
-        )
+        return base_qs.prefetch_related("user_skill__milestones")
 
     def get_serializer_class(self):
         """Use appropriate serializer based on action."""
@@ -977,37 +970,54 @@ class SkillFeedbackViewSet(viewsets.ModelViewSet):
             # Get the queryset for the specific user_skill through exchange relationship
             queryset = self.get_queryset().filter(exchange__user_skill_id=user_skill_id)
 
-            # Calculate statistics
+            # Aggregate total_reviews, average_rating, recommendation_rate and rating counts in ONE query
             stats = queryset.aggregate(
-                total_reviews=models.Count("id"),
+                total_reviews=Count("id"),
                 average_rating=models.Avg("rating"),
                 recommendation_rate=models.ExpressionWrapper(
-                    100.0
-                    * models.Count("id", filter=models.Q(is_recommended=True))
-                    / models.Count("id"),
+                    100.0 * Count("id", filter=Q(is_recommended=True)) / Count("id"),
                     output_field=models.DecimalField(),
                 ),
-                rating_distribution=models.Window(
-                    expression=models.Count("id"),
-                    partition_by=[models.F("rating")],
-                ),
+                rating_1_count=Count("id", filter=Q(rating=1)),
+                rating_2_count=Count("id", filter=Q(rating=2)),
+                rating_3_count=Count("id", filter=Q(rating=3)),
+                rating_4_count=Count("id", filter=Q(rating=4)),
+                rating_5_count=Count("id", filter=Q(rating=5)),
             )
 
-            # Add rating distribution
-            rating_dist = {}
-            for i in range(1, 6):
-                count = queryset.filter(rating=i).count()
-                total = stats["total_reviews"] or 1  # Avoid division by zero
-                rating_dist[str(i)] = {
-                    "count": count,
-                    "percentage": (count / total) * 100,
-                }
+            total = stats["total_reviews"] or 1  # Avoid division by zero
+
+            # Build rating distribution dictionary
+            rating_dist = {
+                "1": {
+                    "count": stats["rating_1_count"],
+                    "percentage": (stats["rating_1_count"] / total) * 100,
+                },
+                "2": {
+                    "count": stats["rating_2_count"],
+                    "percentage": (stats["rating_2_count"] / total) * 100,
+                },
+                "3": {
+                    "count": stats["rating_3_count"],
+                    "percentage": (stats["rating_3_count"] / total) * 100,
+                },
+                "4": {
+                    "count": stats["rating_4_count"],
+                    "percentage": (stats["rating_4_count"] / total) * 100,
+                },
+                "5": {
+                    "count": stats["rating_5_count"],
+                    "percentage": (stats["rating_5_count"] / total) * 100,
+                },
+            }
 
             stats["rating_distribution"] = rating_dist
 
             return Response(stats)
 
         except Exception as e:
+            raise e
+
             return Response(
                 {"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
