@@ -1,4 +1,5 @@
 from accounts.serializers import UserBasicSerializer
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
@@ -6,6 +7,7 @@ from rest_framework import serializers
 from .models import Skill
 from .models import SkillCategory
 from .models import SkillExchange
+from .models import SkillFeedback
 from .models import SkillMilestone
 from .models import UserSkill
 
@@ -570,3 +572,221 @@ class SkillExchangeDetailSerializer(serializers.ModelSerializer):
         validated_data["learner"] = request.user
         validated_data["status"] = SkillExchange.Status.PENDING
         return super().create(validated_data)
+
+
+class SkillFeedbackListSerializer(serializers.ModelSerializer):
+    """
+    Serializer for listing feedback.
+    Includes basic information needed for list views.
+    """
+
+    teacher_name = serializers.CharField(source="user_skill.user.get_full_name")
+    student_name = serializers.CharField(source="student.get_full_name")
+    skill_name = serializers.CharField(source="user_skill.skill.name")
+    days_ago = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SkillFeedback
+        fields = [
+            "id",
+            "teacher_name",
+            "student_name",
+            "skill_name",
+            "rating",
+            "is_recommended",
+            "days_ago",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    @extend_schema_field(
+        {"type": "integer", "description": "Number of days since feedback was given"}
+    )
+    def get_days_ago(self, obj):
+        """Calculate days since feedback was given."""
+        delta = timezone.now() - obj.created_at
+        return delta.days
+
+
+class SkillFeedbackDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializer for detailed feedback view.
+    Used for retrieving complete feedback information.
+    """
+
+    teacher_skill = UserSkillListSerializer(source="user_skill", read_only=True)
+    student_name = serializers.CharField(source="student.get_full_name", read_only=True)
+    is_within_update_window = serializers.BooleanField(read_only=True)
+    days_ago = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SkillFeedback
+        fields = [
+            "id",
+            "teacher_skill",
+            "student_name",
+            "rating",
+            "comment",
+            "is_recommended",
+            "days_ago",
+            "is_within_update_window",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "created_at",
+            "updated_at",
+            "is_within_update_window",
+            "days_ago",
+        ]
+
+    @extend_schema_field(
+        {"type": "integer", "description": "Number of days since feedback was given"}
+    )
+    def get_days_ago(self, obj):
+        """Calculate days since feedback was given."""
+        delta = timezone.now() - obj.created_at
+        return delta.days
+
+
+class SkillFeedbackCreateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for creating new feedback.
+    Includes validation for exchange-based feedback creation.
+    """
+
+    exchange = serializers.PrimaryKeyRelatedField(
+        queryset=SkillExchange.objects.filter(status=SkillExchange.Status.COMPLETED),
+        write_only=True,
+        help_text=_("The completed exchange for which feedback is being given."),
+    )
+
+    class Meta:
+        model = SkillFeedback
+        fields = [
+            "exchange",
+            "rating",
+            "comment",
+            "is_recommended",
+        ]
+
+    def validate_rating(self, value):
+        """
+        Validate rating:
+        - Must be between 0 and 5
+        - Must be in 0.5 increments
+        """
+        if not (0 <= value <= 5):
+            raise serializers.ValidationError(_("Rating must be between 0 and 5."))
+
+        if value * 2 != int(value * 2):
+            raise serializers.ValidationError(_("Rating must be in 0.5 increments."))
+
+        return value
+
+    def validate_comment(self, value):
+        """
+        Validate comment:
+        - Minimum length for meaningful feedback
+        - Maximum length to prevent abuse
+        - Basic content validation
+        """
+        if len(value.strip()) < 20:
+            raise serializers.ValidationError(
+                _("Please provide at least 20 characters of feedback.")
+            )
+
+        if len(value) > 2000:
+            raise serializers.ValidationError(
+                _("Feedback comment cannot exceed 2000 characters.")
+            )
+
+        # Basic content validation (e.g., no excessive URLs, no HTML)
+        if value.lower().count("http") > 2:
+            raise serializers.ValidationError(
+                _("Too many URLs in the feedback. Maximum 2 URLs allowed.")
+            )
+
+        if "<" in value and ">" in value:
+            raise serializers.ValidationError(
+                _("HTML tags are not allowed in feedback.")
+            )
+
+        return value.strip()
+
+
+class SkillFeedbackUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for updating existing feedback.
+    Includes validation for update window and field restrictions.
+    """
+
+    class Meta:
+        model = SkillFeedback
+        fields = [
+            "rating",
+            "comment",
+            "is_recommended",
+        ]
+
+    def validate_rating(self, value):
+        """
+        Validate rating:
+        - Must be between 0 and 5
+        - Must be in 0.5 increments
+        """
+        if not (0 <= value <= 5):
+            raise serializers.ValidationError(_("Rating must be between 0 and 5."))
+
+        if value * 2 != int(value * 2):
+            raise serializers.ValidationError(_("Rating must be in 0.5 increments."))
+
+        return value
+
+    def validate_comment(self, value):
+        """
+        Validate comment:
+        - Minimum length for meaningful feedback
+        - Maximum length to prevent abuse
+        - Basic content validation
+        """
+        if len(value.strip()) < 20:
+            raise serializers.ValidationError(
+                _("Please provide at least 20 characters of feedback.")
+            )
+
+        if len(value) > 2000:
+            raise serializers.ValidationError(
+                _("Feedback comment cannot exceed 2000 characters.")
+            )
+
+        # Basic content validation
+        if value.lower().count("http") > 2:
+            raise serializers.ValidationError(
+                _("Too many URLs in the feedback. Maximum 2 URLs allowed.")
+            )
+
+        if "<" in value and ">" in value:
+            raise serializers.ValidationError(
+                _("HTML tags are not allowed in feedback.")
+            )
+
+        return value.strip()
+
+    def validate(self, data):
+        """
+        Cross-field validation:
+        - Check update window for rating/recommendation changes
+        """
+        instance = self.instance
+        if not instance.is_within_update_window:
+            if "rating" in data or "is_recommended" in data:
+                raise serializers.ValidationError(
+                    {
+                        "detail": _(
+                            "Rating and recommendation can only be updated within 72 hours of creation."
+                        )
+                    }
+                )
+
+        return data

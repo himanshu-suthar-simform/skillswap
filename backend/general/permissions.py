@@ -26,6 +26,43 @@ class AdminOrReadOnly(BasePermission):
         )
 
 
+class IsOwnerOrReadOnly(BasePermission):
+    """
+    Custom permission that allows:
+    - Read access to authenticated users
+    - Write access only to the owner of the object
+    - Full access to admin users
+
+    This is used for resources like feedback where:
+    - Anyone can read public feedback
+    - Only the feedback creator can edit their feedback
+    - Admins can moderate all feedback
+    """
+
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request, view, obj):
+        # Allow GET, HEAD, OPTIONS for any authenticated user
+        if request.method in SAFE_METHODS:
+            return True
+
+        # Allow admins full access
+        if (
+            request.user.role == "ADMIN"
+            or request.user.is_staff
+            or request.user.is_superuser
+        ):
+            return True
+
+        # For feedback objects
+        if hasattr(obj, "student"):
+            return obj.student == request.user
+
+        # For other objects, check user attribute
+        return obj.user == request.user
+
+
 class IsOwnerOrAdmin(BasePermission):
     """
     Custom permission for UserSkill objects that allows:

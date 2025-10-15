@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import SkillCategoryViewSet
 from .views import SkillExchangeViewSet
+from .views import SkillFeedbackViewSet
 from .views import SkillViewSet
 from .views import UserSkillViewSet
 
@@ -17,6 +18,9 @@ router.register(r"teaching-skills", UserSkillViewSet, basename="teaching-skill")
 
 # Register the exchange viewset
 router.register(r"exchanges", SkillExchangeViewSet, basename="exchange")
+
+# Register the feedback viewset
+router.register(r"feedback", SkillFeedbackViewSet, basename="feedback")
 
 # The API URLs are now determined automatically by the router.
 urlpatterns = [

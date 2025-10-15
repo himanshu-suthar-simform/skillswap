@@ -1,6 +1,8 @@
 from django.db import models
 from django.db.models import Avg
 from django.db.models import Count
+from django.db.models import Exists
+from django.db.models import OuterRef
 from django.db.models import Prefetch
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
@@ -10,7 +12,10 @@ from general.pagination import LargeResultsSetPagination
 from general.pagination import StandardResultsSetPagination
 from general.permissions import AdminOrReadOnly
 from general.permissions import IsOwnerOrAdmin
+from general.permissions import IsOwnerOrReadOnly
+from general.throttling import ReviewRateThrottle
 from general.throttling import SkillCreationRateThrottle
+from rest_framework import serializers
 from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -24,12 +29,17 @@ from .filters import UserSkillFilter
 from .models import Skill
 from .models import SkillCategory
 from .models import SkillExchange
+from .models import SkillFeedback
 from .models import SkillMilestone
 from .models import UserSkill
 from .serializers import SkillCategorySerializer
 from .serializers import SkillDetailSerializer
 from .serializers import SkillExchangeDetailSerializer
 from .serializers import SkillExchangeListSerializer
+from .serializers import SkillFeedbackCreateSerializer
+from .serializers import SkillFeedbackDetailSerializer
+from .serializers import SkillFeedbackListSerializer
+from .serializers import SkillFeedbackUpdateSerializer
 from .serializers import SkillListSerializer
 from .serializers import SkillMilestoneSerializer
 from .serializers import UserSkillDetailSerializer
@@ -585,6 +595,7 @@ class UserSkillViewSet(viewsets.ModelViewSet):
             instance.delete()
 
 
+@extend_schema(tags=["Skill Exchanges"])
 class SkillExchangeViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing skill exchange requests.
@@ -695,6 +706,9 @@ class SkillExchangeViewSet(viewsets.ModelViewSet):
 
         # Status-specific validations
         if new_status == SkillExchange.Status.ACCEPTED:
+            # The user_skill user is the one to whom the request has been received,
+            # so its his/her responsibility to accept/reject, so that the learner knows
+            # if his/her request is accepted by intended user or not.
             if exchange.user_skill.user != request.user:
                 return Response(
                     {"detail": _("Only the teacher can accept this request.")},
@@ -719,6 +733,7 @@ class SkillExchangeViewSet(viewsets.ModelViewSet):
                 )
 
         elif new_status == SkillExchange.Status.CANCELLED:
+            # Only participants can cancel the exchange (teacher or learner)
             if (
                 exchange.user_skill.user != request.user
                 and exchange.learner != request.user
@@ -783,3 +798,257 @@ class SkillExchangeViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(exchange)
         return Response(serializer.data)
+
+
+@extend_schema(tags=["Skill Feedback"])
+class SkillFeedbackViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing feedback on teaching skills.
+
+    Features:
+    - List feedback with filtering and search
+    - Create new feedback for completed exchanges
+    - Update feedback within allowed timeframe (72 hours)
+    - Retrieve feedback details
+    - Analytics on teacher ratings
+    - Rate limiting to prevent abuse
+
+    Security:
+    - Only authenticated users can create/view feedback
+    - Users can only update their own feedback
+    - Feedback can only be given for completed exchanges
+    - Rate limiting applied to prevent spam
+
+    Validation:
+    - One feedback per exchange
+    - Exchange must be completed
+    - Student must be the exchange participant
+    - Rating must be between 0 and 5
+    - Comments must meet minimum length requirements
+    """
+
+    queryset = SkillFeedback.objects.all()  # Prevents schema generation issues
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+    pagination_class = StandardResultsSetPagination
+    throttle_classes = [ReviewRateThrottle]
+
+    def get_queryset(self):
+        """
+        Get the queryset for feedback.
+        If requesting user is teacher: Show feedback received.
+        If student: Show feedback given and public feedback.
+        """
+        if getattr(self, "swagger_fake_view", False):  # Handles schema generation
+            return SkillFeedback.objects.none()
+
+        queryset = SkillFeedback.objects.select_related(
+            "user_skill", "user_skill__user", "user_skill__skill", "student"
+        ).all()
+
+        # Only show feedback for authenticated users
+        if not self.request.user.is_authenticated:
+            return SkillFeedback.objects.none()
+
+        return queryset
+
+    search_fields = [
+        "comment",
+        "user_skill__skill__name",
+        "user_skill__user__username",
+        "student__username",
+    ]
+    ordering_fields = ["created_at", "rating", "is_recommended"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        """
+        Get the list of feedback with optimized queries.
+        Annotates additional fields and filters based on user role.
+        """
+        queryset = SkillFeedback.objects.select_related(
+            "user_skill",
+            "user_skill__skill",
+            "user_skill__user",
+            "student",
+            "exchange",
+        )
+
+        # For regular users, show only:
+        # 1. Feedback they've given
+        # 2. Feedback on their teaching skills
+        # 3. Public feedback on other teaching skills
+        if not (
+            self.request.user.role == "ADMIN"
+            or self.request.user.is_staff
+            or self.request.user.is_superuser
+        ):
+            queryset = queryset.filter(
+                models.Q(student=self.request.user)
+                | models.Q(user_skill__user=self.request.user)
+                | models.Q(is_public=True)
+            )
+
+        return queryset
+
+    def get_serializer_class(self):
+        """Use appropriate serializer based on action."""
+        if self.action == "create":
+            return SkillFeedbackCreateSerializer
+        if self.action in ["update", "partial_update"]:
+            return SkillFeedbackUpdateSerializer
+        if self.action == "list":
+            return SkillFeedbackListSerializer
+        return SkillFeedbackDetailSerializer
+
+    def perform_create(self, serializer):
+        """
+        Create feedback for a completed exchange.
+        Validates exchange completion and one feedback per exchange rule.
+        """
+        exchange = serializer.validated_data["exchange"]
+
+        # Ensure exchange is completed
+        if exchange.status != SkillExchange.Status.COMPLETED:
+            raise ValidationError(
+                {"exchange": _("Can only provide feedback for completed exchanges.")}
+            )
+
+        # Ensure student is the exchange participant
+        if exchange.learner != self.request.user:
+            raise ValidationError(
+                {"exchange": _("You can only provide feedback for your own exchanges.")}
+            )
+
+        # Ensure no existing feedback for this exchange
+        if SkillFeedback.objects.filter(exchange=exchange).exists():
+            raise ValidationError(
+                {"exchange": _("Feedback has already been provided for this exchange.")}
+            )
+
+        # Set the student and user_skill from the exchange
+        serializer.save(
+            student=self.request.user,
+            user_skill=exchange.user_skill,
+            exchange=exchange,
+        )
+
+    def perform_update(self, serializer):
+        """
+        Update feedback within allowed timeframe.
+        Validates update window and prevents rating/recommendation changes after window.
+        """
+        instance = serializer.instance
+
+        # Check if update is within allowed timeframe (72 hours)
+        if not instance.is_within_update_window:
+            # After update window, only allow updating the comment
+            if (
+                "rating" in serializer.validated_data
+                or "is_recommended" in serializer.validated_data
+            ):
+                raise ValidationError(
+                    {
+                        "detail": _(
+                            "Rating and recommendation can only be updated within 72 hours of creation."
+                        )
+                    }
+                )
+
+        serializer.save()
+
+    @extend_schema(
+        summary="Get feedback statistics",
+        description="Get aggregated feedback statistics for a teaching skill.",
+        responses={200: serializers.Serializer},
+    )
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="stats/(?P<user_skill_id>[^/.]+)",
+        permission_classes=[IsAuthenticated],
+    )
+    def get_stats(self, request, user_skill_id=None):
+        """Get aggregated feedback statistics for a teaching skill."""
+        try:
+            # Get the queryset for the specific user_skill
+            queryset = self.get_queryset().filter(user_skill_id=user_skill_id)
+
+            # Calculate statistics
+            stats = queryset.aggregate(
+                total_reviews=models.Count("id"),
+                average_rating=models.Avg("rating"),
+                recommendation_rate=models.ExpressionWrapper(
+                    100.0
+                    * models.Count("id", filter=models.Q(is_recommended=True))
+                    / models.Count("id"),
+                    output_field=models.DecimalField(),
+                ),
+                rating_distribution=models.Window(
+                    expression=models.Count("id"),
+                    partition_by=[models.F("rating")],
+                ),
+            )
+
+            # Add rating distribution
+            rating_dist = {}
+            for i in range(1, 6):
+                count = queryset.filter(rating=i).count()
+                total = stats["total_reviews"] or 1  # Avoid division by zero
+                rating_dist[str(i)] = {
+                    "count": count,
+                    "percentage": (count / total) * 100,
+                }
+
+            stats["rating_distribution"] = rating_dist
+
+            return Response(stats)
+
+        except Exception as e:
+            return Response(
+                {"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @extend_schema(
+        summary="Get student's exchange history",
+        description="Get a list of exchanges that are eligible for feedback.",
+        responses={200: serializers.Serializer},
+    )
+    @action(detail=False, methods=["get"])
+    def eligible_exchanges(self, request):
+        """Get a list of completed exchanges eligible for feedback."""
+        # Get completed exchanges where user is the learner
+        exchanges = SkillExchange.objects.filter(
+            learner=request.user,
+            status=SkillExchange.Status.COMPLETED,
+        ).select_related("user_skill", "user_skill__skill", "user_skill__user")
+
+        # Annotate with existing feedback
+        exchanges = exchanges.annotate(
+            has_feedback=Exists(SkillFeedback.objects.filter(exchange=OuterRef("pk")))
+        )
+
+        # Filter exchanges without feedback
+        exchanges = exchanges.filter(has_feedback=False)
+
+        # Prepare response data
+        data = [
+            {
+                "id": exchange.id,
+                "teacher": exchange.user_skill.user.get_full_name(),
+                "skill": exchange.user_skill.skill.name,
+                "completed_at": exchange.updated_at,
+            }
+            for exchange in exchanges
+        ]
+
+        return Response(data)
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Deletion is not allowed to maintain feedback integrity.
+        Consider using update to mark feedback as retracted instead.
+        """
+        return Response(
+            {"detail": _("Feedback cannot be deleted once submitted.")},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
