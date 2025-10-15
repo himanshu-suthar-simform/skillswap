@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.files.images import get_image_dimensions
+from django.utils.translation import gettext_lazy as _
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -359,3 +360,140 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                     data["user"]["profile"]["profile_picture_url"] = (
                         request.build_absolute_uri(profile.profile_picture.url)
                     )
+
+
+class UserDetailSerializer(UserBasicSerializer):
+    """
+    Detailed serializer for User model.
+    Extends UserBasicSerializer to include additional user information.
+    Used for retrieving user details and profile information.
+    """
+
+    profile = ProfileSerializer(read_only=True)
+    full_name = serializers.SerializerMethodField()
+    date_joined = serializers.DateTimeField(read_only=True)
+    last_login = serializers.DateTimeField(read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "email",
+            "username",
+            "first_name",
+            "last_name",
+            "full_name",
+            "profile",
+            "date_joined",
+            "last_login",
+            "is_active",
+        ]
+        read_only_fields = fields
+
+
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for updating user profile information.
+    Allows updating both User and Profile model fields in a single request.
+    """
+
+    profile = ProfileSerializer(required=False)
+
+    class Meta:
+        model = User
+        fields = [
+            "first_name",
+            "last_name",
+            "profile",
+        ]
+
+    def validate_first_name(self, value):
+        """Validate first_name."""
+        if not value.strip():
+            raise serializers.ValidationError(_("First name cannot be empty."))
+        if len(value) > 150:
+            raise serializers.ValidationError(
+                _("First name cannot exceed 150 characters.")
+            )
+        return value.strip()
+
+    def validate_last_name(self, value):
+        """Validate last_name."""
+        if not value.strip():
+            raise serializers.ValidationError(_("Last name cannot be empty."))
+        if len(value) > 150:
+            raise serializers.ValidationError(
+                _("Last name cannot exceed 150 characters.")
+            )
+        return value.strip()
+
+    def update(self, instance, validated_data):
+        """
+        Update user and profile information.
+
+        Args:
+            instance: User instance to update
+            validated_data: Validated data containing user and profile fields
+
+        Returns:
+            User: Updated user instance
+        """
+        # Extract profile data
+        profile_data = validated_data.pop("profile", {})
+
+        # Update user fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # Update profile
+        if profile_data and hasattr(instance, "profile"):
+            profile = instance.profile
+            for attr, value in profile_data.items():
+                setattr(profile, attr, value)
+            profile.save()
+
+        return instance
+
+
+class UserListSerializer(UserBasicSerializer):
+    """
+    Serializer for listing users.
+    Extends UserBasicSerializer to include minimal additional information.
+    Used for user listing and search results.
+    """
+
+    profile = serializers.SerializerMethodField()
+    date_joined = serializers.DateTimeField(read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "full_name",
+            "profile",
+            "profile_picture_url",
+            "date_joined",
+            "is_active",
+        ]
+        read_only_fields = fields
+
+    def get_profile(self, obj):
+        """
+        Get minimal profile information for list view.
+
+        Args:
+            obj: User instance
+
+        Returns:
+            dict: Basic profile information
+        """
+        try:
+            return {
+                "location": obj.profile.location,
+                "is_available": obj.profile.is_available,
+            }
+        except Profile.DoesNotExist:
+            return None
