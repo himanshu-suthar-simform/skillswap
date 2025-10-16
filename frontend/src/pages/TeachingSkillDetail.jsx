@@ -43,7 +43,7 @@ export default function TeachingSkillDetail() {
         <div className="mb-4">
           <p className="text-sm">
             <span className="font-medium text-gray-300">Teacher:</span>{" "}
-            {skill.teacher_name}
+            {skill.user?.full_name}
           </p>
           <p className="text-sm">
             <span className="font-medium text-gray-300">Proficiency:</span>{" "}
@@ -72,9 +72,7 @@ export default function TeachingSkillDetail() {
             <ul className="list-disc list-inside space-y-2">
               {skill.milestones.map((m) => (
                 <li key={m.id}>
-                  <p className="font-medium">
-                    {m.title} ({m.estimated_hours} hrs)
-                  </p>
+                  {m.title} ({m.estimated_hours} hrs)
                   <p className="text-gray-400">{m.description}</p>
                 </li>
               ))}

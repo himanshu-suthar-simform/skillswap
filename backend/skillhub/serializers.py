@@ -304,6 +304,7 @@ class UserSkillDetailSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     milestones = SkillMilestoneSerializer(many=True, read_only=True)
+    user = UserBasicSerializer(read_only=True)
 
     class Meta:
         model = UserSkill
