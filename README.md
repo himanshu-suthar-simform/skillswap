@@ -296,3 +296,81 @@ chmod +x run_tests.sh
 # Run without coverage
 ./run_tests.sh -n
 ```
+
+## Background Jobs (Celery)
+
+Celery powers background jobs and django-celery-beat manages periodic schedules.
+
+Prerequisites assumed: Redis is running and reachable by your app.
+
+### 1. Configure environment
+
+Add the following to backend/.env (adjust if needed):
+```env
+DJANGO_ENV=dev  # or prod/staging
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/1
+```
+
+Ensure migrations are applied (includes django_celery_beat tables):
+```bash
+cd backend
+python manage.py migrate
+```
+
+### 2. Run Celery locally (development)
+
+Use two terminals from the backend directory.
+
+- Terminal 1: Celery worker
+  ```bash
+  cd backend
+  celery -A skillswap worker -l info
+  # Optional tuning
+  # celery -A skillswap worker -l INFO --concurrency=4 --max-tasks-per-child=1000
+  ```
+
+- Terminal 2: Celery beat (database scheduler)
+  ```bash
+  cd backend
+  celery -A skillswap beat -l info -S django_celery_beat.schedulers:DatabaseScheduler
+  ```
+
+### 3. Create a periodic task (recommended)
+
+Create a nightly cleanup at 00:00 using the management command:
+```bash
+cd backend
+python manage.py create_periodic_task \
+  --task-path "skillhub.tasks.cleanup.cleanup_inactive_skills_and_categories" \
+  --task-name "Nightly Skill Cleanup" \
+  --hour 0 \
+  --minute 0
+```
+
+### 4. Alternative: Define schedule in code
+
+You can hardcode schedules in backend/skillswap/celery.py:
+```python
+from celery.schedules import crontab
+
+app.conf.beat_schedule = {
+    "cleanup-inactive-skills": {
+        "task": "skillhub.tasks.cleanup.cleanup_inactive_skills_and_categories",
+        "schedule": crontab(hour=0, minute=0),
+    },
+}
+```
+
+Note: When using django-celery-beat (database scheduler), prefer the management command (Step 3). If you use code-based schedules only, run beat without the database scheduler flag.
+
+### 5. Production-grade run
+
+- Set environment appropriately (DJANGO_ENV=prod) and ensure .env includes the CELERY_* settings.
+- Run worker and beat under a supervisor (systemd example below). Adjust paths, user, and concurrency.
+
+
+## Frontend Development
+
+The frontend implementation is currently in progress.
+It can be developed in the future, following the same modular structure and API-driven approach of the backend.
