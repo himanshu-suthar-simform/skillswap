@@ -4,7 +4,9 @@ A peer-to-peer platform where users exchange skills by teaching what they know a
 
 ## Overview
 
-SkillSwap is a dynamic platform that facilitates peer-to-peer skill exchange and learning. Users can share their expertise, learn new skills, and engage in mutually beneficial learning relationships.
+SkillSwap is all about learning from each other. If you know something and want to share it, you can also learn something in return. It’s not about money—it’s about exchanging skills and time.
+
+For example, let’s say User1 knows Python and User2 knows Java. User1 can send a request to User2 saying, “Hey, can you teach me Java? I’ll teach you Python in return.” Now, it’s totally up to User2 to accept or reject the request. Only if User2 agrees, the exchange will happen. It’s simple, fair, and makes learning fun!
 
 ### Key Features
 
@@ -370,7 +372,20 @@ Note: When using django-celery-beat (database scheduler), prefer the management 
 - Run worker and beat under a supervisor (systemd example below). Adjust paths, user, and concurrency.
 
 
-## Frontend Development
+## Future
 
-The frontend implementation is currently in progress.
-It can be developed in the future, following the same modular structure and API-driven approach of the backend.
+### Frontend Development
+
+The frontend of SkillSwap is partially implemented. Currently, around 40% of the frontend work is done, including:
+- Auth context and authentication management
+- User profile fetch (get user profile)
+- Exchange list display
+- Basic UI for registration and login
+
+However, many features are half-done, and some functionalities may not work properly yet on the frontend side, such as:
+- Full registration and login flow
+- Skill exchange request handling
+- Milestone tracking and feedback system
+- Search, filters, and location-based user discovery
+
+The remaining 60% of frontend development will be completed later. This includes building a fully functional, interactive UI that consumes backend APIs for all features and ensures smooth, real-time skill exchange between users.
