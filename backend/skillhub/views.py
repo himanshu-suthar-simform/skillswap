@@ -303,6 +303,10 @@ class UserSkillViewSet(viewsets.ModelViewSet):
 
         queryset = UserSkill.objects.select_related("user", "skill", "skill__category")
 
+        # If requesting my-skills endpoint, return only current user's skills
+        if self.action == "my_skills":
+            return queryset.filter(user=self.request.user)
+
         # For non-admin users, show only active skills of others
         if not (
             self.request.user.role == "ADMIN"
@@ -381,6 +385,45 @@ class UserSkillViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Create a new teaching skill for the current user."""
         serializer.save(user=self.request.user)
+
+    @extend_schema(
+        summary="Get current user's teaching skills",
+        description="Get a list of all teaching skills registered by the current authenticated user.",
+        responses={
+            200: UserSkillListSerializer(many=True),
+            401: {"description": "Authentication required"},
+        },
+    )
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="my-skills",
+        permission_classes=[IsAuthenticated],
+    )
+    def my_skills(self, request):
+        """
+        Get all teaching skills of the currently authenticated user.
+        This includes both active and inactive skills.
+        """
+        queryset = self.get_queryset()
+
+        # Apply ordering
+        ordering = request.query_params.get("ordering", "-created_at")
+        if ordering:
+            queryset = queryset.order_by(ordering)
+
+        # Apply pagination
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = UserSkillListSerializer(
+                page, many=True, context={"request": request}
+            )
+            return self.get_paginated_response(serializer.data)
+
+        serializer = UserSkillListSerializer(
+            queryset, many=True, context={"request": request}
+        )
+        return Response(serializer.data)
 
     @extend_schema(
         summary="Toggle skill availability",
