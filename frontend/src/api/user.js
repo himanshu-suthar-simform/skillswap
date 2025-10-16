@@ -17,3 +17,20 @@ export const getUserSkills = async () => {
   const response = await api.get(endpoint);
   return response.data;
 };
+
+/**
+ * Get list of users (paginated)
+ * page: optional, default 1
+ */
+export const getUsers = async (page = 1) => {
+  const response = await api.get(`/accounts/users/?page=${page}`);
+  return response.data; // { count, next, previous, results }
+};
+
+/**
+ * Get user by ID
+ */
+export const getUserById = async (userId) => {
+  const response = await api.get(`/accounts/users/${userId}/`);
+  return response.data;
+};
