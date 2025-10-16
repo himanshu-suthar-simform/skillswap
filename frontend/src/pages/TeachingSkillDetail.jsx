@@ -1,13 +1,16 @@
 // src/pages/TeachingSkillDetail.jsx
-import React from "react";
+import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getTeachingSkillDetail } from "../api/skills";
 import { toast } from "react-toastify";
+import RequestToLearnModal from "./RequestToLearnModal";
+import { getMyExchanges } from "../api/exchanges";
 
 export default function TeachingSkillDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [showModal, setShowModal] = useState(false);
 
   const {
     data: skill,
@@ -18,6 +21,18 @@ export default function TeachingSkillDetail() {
     queryFn: () => getTeachingSkillDetail(id),
     onError: () => toast.error("Failed to load skill details"),
   });
+
+  // inside TeachingSkillDetail()
+  const { data: exchanges, isLoading: loadingExchanges } = useQuery({
+    queryKey: ["myExchanges"],
+    queryFn: getMyExchanges,
+  });
+
+  // check if a request already exists for this teaching skill
+  const existingRequest = exchanges?.find(
+    (ex) =>
+      ex.teacher_skill?.id === skill?.id
+  );
 
   if (isLoading) {
     return <div className="text-white p-4">Loading skill details...</div>;
@@ -121,13 +136,36 @@ export default function TeachingSkillDetail() {
           <p>Teaching Methods: {skill.teaching_methods || "N/A"}</p>
         </div>
 
-        <div className="mt-6">
+        <div className="min-h-screen bg-black text-white p-6">
           <button
-            onClick={() => toast.info("Feature coming soon: Request to Learn")}
-            className="w-full py-2 rounded bg-blue-600 hover:bg-blue-700 transition"
+            onClick={() => navigate(-1)}
+            className="mb-6 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded"
           >
-            Request to Learn
+            ← Back
           </button>
+
+          <div className="max-w-3xl mx-auto bg-gray-900/70 p-6 rounded-2xl border border-gray-800 shadow-lg">
+            <div className="mt-6">
+              {existingRequest ? (
+                <p className="text-yellow-400 font-semibold">
+                  Request Status: {existingRequest.status_display}
+                </p>
+              ) : (
+                <button
+                  onClick={() => setShowModal(true)}
+                  className="w-full py-2 rounded bg-blue-600 hover:bg-blue-700 transition"
+                >
+                  Request to Learn
+                </button>
+              )}
+            </div>
+          </div>
+
+          <RequestToLearnModal
+            open={showModal}
+            onClose={() => setShowModal(false)}
+            teacherSkillId={id}
+          />
         </div>
       </div>
     </div>

@@ -266,12 +266,14 @@ class UserSkillListSerializer(serializers.ModelSerializer):
         max_digits=3,
         decimal_places=2,
     )
+    user = UserBasicSerializer(read_only=True)
 
     class Meta:
         model = UserSkill
         fields = [
             "id",
             "skill",
+            "user",
             "skill_name",
             "category_name",
             "proficiency_level",
@@ -280,7 +282,7 @@ class UserSkillListSerializer(serializers.ModelSerializer):
             "rating",
             "created_at",
         ]
-        read_only_fields = ["created_at"]
+        read_only_fields = ["created_at", "user"]
 
 
 class UserSkillDetailSerializer(serializers.ModelSerializer):
@@ -432,6 +434,7 @@ class SkillExchangeListSerializer(serializers.ModelSerializer):
     def get_teacher_skill(self, obj):
         """Get basic information about the teacher's skill."""
         return {
+            "id": obj.user_skill.id,
             "teacher_name": obj.user_skill.user.get_full_name()
             or obj.user_skill.user.email,
             "skill_name": obj.user_skill.skill.name,

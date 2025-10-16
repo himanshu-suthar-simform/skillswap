@@ -43,7 +43,7 @@ export default function TeachingSkills() {
               Category: {skill.category_name}
             </p>
             <p className="text-sm mb-1">
-              <span className="font-medium">Teacher:</span> {skill.teacher_name}
+              <span className="font-medium">Teacher:</span> {skill?.user?.full_name}
             </p>
             <p className="text-sm mb-1">
               <span className="font-medium">Proficiency:</span>{" "}
