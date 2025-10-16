@@ -130,11 +130,23 @@ AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
 ]
 
-# Cors settings
-CORS_ALLOW_ALL_ORIGINS = True
+# Proxy and IP handling settings
+USE_X_FORWARDED_HOST = True
+USE_X_FORWARDED_PORT = True
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Number of proxies in front of the application (important for IP resolution)
+# Set to 0 for local development, adjust for production based on infrastructure
+NUM_PROXIES = int(os.environ.get("NUM_PROXIES", "0"))
+
+# List of IPs/Subnets that are known proxies
+KNOWN_PROXIES = os.environ.get("KNOWN_PROXIES", "").split(",")
+
+# CORS settings
+CORS_ALLOW_ALL_ORIGINS = True  # Change this in production
 # CORS_ALLOWED_ORIGINS = [
 #     "http://localhost:3000",
-#     "http://
+#     "http://localhost:8000",
 # ]
 
 # Rest Framework Configuration

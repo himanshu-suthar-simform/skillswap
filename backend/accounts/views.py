@@ -1,9 +1,12 @@
 from django.db import models
 from django.shortcuts import get_object_or_404
+from django.utils.translation import gettext_lazy as _
 from drf_spectacular.utils import OpenApiParameter
 from drf_spectacular.utils import OpenApiResponse
 from drf_spectacular.utils import extend_schema
+from general.throttling import TokenGenerationRateThrottle
 from rest_framework import status
+from rest_framework.exceptions import Throttled
 from rest_framework.generics import CreateAPIView
 from rest_framework.generics import ListAPIView
 from rest_framework.generics import RetrieveAPIView
@@ -119,15 +122,30 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
     Takes a set of user credentials and returns an access and refresh JSON web
     token pair along with user details to prove the authentication of those credentials.
+
+    Rate Limiting:
+    - 3 attempts per 1 minute per IP address
+    - After 3 failed attempts, user must wait 1 minute before retrying
     """
 
     serializer_class = CustomTokenObtainPairSerializer
+    throttle_classes = [TokenGenerationRateThrottle]
 
     def get_serializer_context(self):
         """Add request to serializer context for absolute URLs."""
         context = super().get_serializer_context()
         context["request"] = self.request
         return context
+
+    def throttled(self, request, wait):
+        """Customize the throttled response message."""
+        raise Throttled(
+            detail={
+                "detail": _(
+                    "Too many login attempts. " "Please try again in {} minutes."
+                ).format(round(wait / 60, 1))
+            }
+        )
 
 
 @extend_schema(

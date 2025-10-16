@@ -68,6 +68,29 @@ class ReviewRateThrottle(UserRateThrottle):
         return daily_allowed
 
 
+class TokenGenerationRateThrottle(UserRateThrottle):
+    """
+    Rate limiting for token generation attempts.
+    Limits users to 3 attempts per minute based on their IP address.
+
+    This helps prevent brute force attacks while allowing legitimate users
+    reasonable retry attempts.
+    """
+
+    rate = "3/m"
+    scope = "token_generation"
+
+    def get_cache_key(self, request, view):
+        """Use IP address as the unique identifier."""
+        # Get the client IP using request.META['REMOTE_ADDR']
+        # This will already account for X-Forwarded-For if USE_X_FORWARDED_HOST is True
+        ident = self.get_ident(request)
+        return self.cache_format % {
+            "scope": self.scope,
+            "ident": ident,
+        }
+
+
 class SkillCreationRateThrottle(UserRateThrottle):
     """
     Combined throttle for skill creation endpoints.
