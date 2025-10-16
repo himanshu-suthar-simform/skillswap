@@ -1,0 +1,14 @@
+/* src/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* global app theme (black background + white text) */
+body {
+  @apply bg-black text-white;
+}
+
+/* optional: smoother form inputs on dark bg */
+input::placeholder {
+  color: #a0aec0; /* tailwind gray-400 hex */
+}
