@@ -13,3 +13,10 @@ export const registerUser = async (userData) => {
   const response = await api.post(endpoint, userData);
   return response.data;
 };
+
+
+export const loginUser = async (credentials) => {
+  const endpoint = "/accounts/auth/token/";
+  const response = await api.post(endpoint, credentials);
+  return response.data;
+};
