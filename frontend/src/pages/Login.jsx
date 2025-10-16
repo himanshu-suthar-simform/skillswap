@@ -43,7 +43,7 @@ export default function Login() {
       toast.success("Login successful!");
 
       // (Optional) Decode token to extract user info if backend doesn't send user details
-      setUser({ email: data?.user?.email }); // update if you decode token
+      setUser({ email: data?.user?.email, id: data?.user?.id }); // update if you decode token
 
       navigate("/dashboard", { replace: true });
     },

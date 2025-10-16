@@ -10,8 +10,12 @@ export const createExchange = async (payload) => {
   return res.data;
 };
 
-
 export const getMyExchanges = async () => {
   const res = await api.get("/skillhub/exchanges/");
   return res.data.results;
+};
+
+export const updateExchangeStatus = async (id, payload) => {
+  const res = await api.post(`/skillhub/exchanges/${id}/update_status/`, payload);
+  return res.data;
 };
