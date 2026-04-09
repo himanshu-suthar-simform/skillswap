@@ -1,0 +1,12 @@
+{
+  "hooks": [
+    {
+      "event": "sessionStart",
+      "run": "bash scripts/session_start.sh"
+    },
+    {
+      "event": "preToolUse",
+      "run": "bash scripts/pre_tool_use.sh"
+    }
+  ]
+}
