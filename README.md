@@ -372,6 +372,116 @@ Note: When using django-celery-beat (database scheduler), prefer the management 
 - Run worker and beat under a supervisor (systemd example below). Adjust paths, user, and concurrency.
 
 
+## Production Server (Gunicorn)
+
+Gunicorn is the recommended WSGI server for running SkillSwap in production.
+
+### 1. Install Gunicorn
+
+```bash
+pip install gunicorn
+```
+
+### 2. Configure environment
+
+Ensure `DJANGO_ENV` is set to `prod` (or the appropriate environment) in `backend/.env`:
+
+```env
+DJANGO_ENV=prod
+```
+
+### 3. Run Gunicorn
+
+From the `backend/` directory:
+
+```bash
+# Basic run
+gunicorn skillswap.wsgi:application
+
+# Recommended production settings
+gunicorn skillswap.wsgi:application \
+  --workers 4 \
+  --worker-class sync \
+  --bind 0.0.0.0:8000 \
+  --timeout 120 \
+  --access-logfile - \
+  --error-logfile -
+```
+
+**Worker count guidance:** A common starting point is `2 * CPU_cores + 1`. Adjust based on your server's resources.
+
+### 4. Gunicorn with a reverse proxy (Nginx)
+
+In production, place Nginx in front of Gunicorn to handle static/media files and SSL termination. Point Gunicorn to a Unix socket for better performance:
+
+```bash
+gunicorn skillswap.wsgi:application \
+  --workers 4 \
+  --bind unix:/run/skillswap/gunicorn.sock \
+  --timeout 120
+```
+
+Then configure Nginx to proxy requests to the socket:
+
+```nginx
+upstream skillswap {
+    server unix:/run/skillswap/gunicorn.sock;
+}
+
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    location /static/ {
+        alias /path/to/backend/staticfiles/;
+    }
+
+    location /media/ {
+        alias /path/to/backend/media/;
+    }
+
+    location / {
+        proxy_pass http://skillswap;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### 5. Run Gunicorn as a systemd service
+
+Create `/etc/systemd/system/skillswap.service`:
+
+```ini
+[Unit]
+Description=SkillSwap Gunicorn daemon
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/path/to/skillswap/backend
+EnvironmentFile=/path/to/skillswap/backend/.env
+ExecStart=/path/to/venv/bin/gunicorn skillswap.wsgi:application \
+          --workers 4 \
+          --bind unix:/run/skillswap/gunicorn.sock \
+          --timeout 120
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start the service:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable skillswap
+sudo systemctl start skillswap
+```
+
 ## Future
 
 ### Frontend Development

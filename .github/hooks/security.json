@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "sessionStart": {
+      "run": "bash /home/himanshu/Documents/Projects/skillswap/scripts/session_start.sh"
+    },
+    "preToolUse": {
+      "run": "bash /home/himanshu/Documents/Projects/skillswap/scripts/pre_tool_use.sh"
+    }
+  }
+}
