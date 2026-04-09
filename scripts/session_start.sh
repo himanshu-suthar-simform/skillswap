@@ -1,6 +1,8 @@
 #!/bin/bash
 
-LOG_FILE="logs/session.log"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+LOG_FILE="$REPO_ROOT/logs/session.log"
 MAX_SIZE_BYTES=$((5 * 1024 * 1024))  # 5 MB
 
 mkdir -p "$(dirname "$LOG_FILE")"
