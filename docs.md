@@ -501,7 +501,9 @@ celery -A skillswap beat -l info -S django_celery_beat.schedulers:DatabaseSchedu
 | Role | Email | Password | Access Level |
 |---|---|---|---|
 | 🛡️ Admin | `admin@admin.com` | `admin` | Full access including admin panel |
-| 👤 Regular User | *(from fixtures)* | `Rama@123` | Standard user access |
+| 👤 Regular User | `test@gmail.com` | `Rama@123` | Standard user access |
+| 👤 Regular User | `test1@gmail.com` | `Rama@123` | Standard user access |
+| 👤 Regular User | `test2@gmail.com` | `Rama@123` | Standard user access |
 
 ### Admin Panel
 
@@ -838,6 +840,8 @@ POST /api/v1/skillhub/feedback/
   "is_recommended": true
 }
 ```
+
+> 💡 **Rating format:** Ratings are decimal values between **0.00 and 5.00** (e.g., `4.50`, `3.75`, `5.00`). Two decimal places are supported.
 
 > ⏱️ **Rate limit on feedback:** Max **5 per hour** and **30 per day** per user.
 >
